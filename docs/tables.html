@@ -1,0 +1,711 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Franchise Manager — Tables</title>
+  <style>
+    :root {
+      --canvas-bg: #f6f7f9;
+      --card-bg: #ffffff;
+      --card-border: rgba(15, 17, 21, 0.08);
+      --card-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02);
+      --header-bg: rgba(255,255,255,0.88);
+      --header-border: #e5e7eb;
+      --row-hover: rgba(0,0,0,0.03);
+      --fg: #0f1115;
+      --fg-muted: #6b7280;
+      --fg-faint: #9ca3af;
+      --accent: #4f46e5;
+      --accent-soft: rgba(79,70,229,0.08);
+      --pk-bg: rgba(37,99,235,0.12);
+      --pk-fg: #1d4ed8;
+      --fk-bg: rgba(249,115,22,0.12);
+      --fk-fg: #c2410c;
+      --uk-bg: rgba(139,92,246,0.14);
+      --uk-fg: #6d28d9;
+      --nn-bg: rgba(107,114,128,0.12);
+      --nn-fg: #4b5563;
+      --memo-bg: #fafbff;
+      --memo-tint: rgba(79,70,229,0.04);
+      --saved-fg: #059669;
+      --note-fg: #9ca3af;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --canvas-bg: #16171b;
+        --card-bg: #22252b;
+        --card-border: rgba(255,255,255,0.07);
+        --card-shadow: 0 1px 2px rgba(0,0,0,0.4);
+        --header-bg: rgba(22,23,27,0.9);
+        --header-border: rgba(255,255,255,0.07);
+        --row-hover: rgba(255,255,255,0.03);
+        --fg: #f3f4f6;
+        --fg-muted: #a1a5af;
+        --fg-faint: #6b7280;
+        --accent: #818cf8;
+        --accent-soft: rgba(129,140,248,0.14);
+        --pk-bg: rgba(96,165,250,0.18);
+        --pk-fg: #93c5fd;
+        --fk-bg: rgba(251,146,60,0.18);
+        --fk-fg: #fdba74;
+        --uk-bg: rgba(167,139,250,0.2);
+        --uk-fg: #c4b5fd;
+        --nn-bg: rgba(156,163,175,0.16);
+        --nn-fg: #d1d5db;
+        --memo-bg: #1c1e23;
+        --memo-tint: rgba(129,140,248,0.06);
+        --saved-fg: #34d399;
+        --note-fg: #7b818c;
+      }
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--canvas-bg);
+      color: var(--fg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+                   "Apple SD Gothic Neo", "Noto Sans KR", Roboto, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    header.app {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 12px 24px;
+      background: var(--header-bg);
+      backdrop-filter: saturate(180%) blur(12px);
+      -webkit-backdrop-filter: saturate(180%) blur(12px);
+      border-bottom: 1px solid var(--header-border);
+    }
+    .brand {
+      font-weight: 600;
+      font-size: 14px;
+      letter-spacing: -0.01em;
+    }
+    .brand .accent { color: var(--accent); }
+    .meta {
+      font-size: 12px;
+      color: var(--fg-muted);
+    }
+    .actions {
+      margin-left: auto;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .filter {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      color: var(--fg);
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 13px;
+      width: 200px;
+    }
+    .filter::placeholder { color: var(--fg-faint); }
+    .filter:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .actions button {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      color: var(--fg);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+    .actions button:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .actions button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: white;
+    }
+    .actions button.primary:hover { opacity: 0.92; color: white; }
+    .actions button.ghost {
+      color: var(--fg-muted);
+    }
+
+    main {
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+      max-width: 1680px;
+      margin: 0 auto;
+    }
+    .row-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .group-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--fg-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+      padding-left: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .group-title::after {
+      content: "";
+      flex: 1;
+      height: 1px;
+      background: var(--card-border);
+    }
+    .row {
+      display: grid;
+      gap: 18px;
+      align-items: stretch;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    @media (max-width: 1100px) {
+      .row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 760px) {
+      .row { grid-template-columns: minmax(0, 1fr); }
+    }
+    .table-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      box-shadow: var(--card-shadow);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .table-card.hidden { display: none; }
+    .table-card.has-memo {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent-soft), var(--card-shadow);
+    }
+    .card-header {
+      padding: 14px 16px 10px;
+      border-bottom: 1px solid var(--card-border);
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+    }
+    .card-titleblock { flex: 1; min-width: 0; }
+    .card-title {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    .card-desc {
+      font-size: 12px;
+      color: var(--fg-muted);
+      margin-top: 4px;
+      line-height: 1.45;
+    }
+    .col-count {
+      font-size: 11px;
+      color: var(--fg-faint);
+      font-variant-numeric: tabular-nums;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .columns {
+      padding: 4px 0;
+    }
+    .column {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: baseline;
+      gap: 10px;
+      padding: 5px 16px;
+      font-size: 12px;
+      min-height: 26px;
+    }
+    .column:hover { background: var(--row-hover); }
+    .col-name {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      min-width: 0;
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .col-name.nullable { color: var(--fg-muted); }
+    .col-name.nullable::after {
+      content: "?";
+      color: var(--fg-faint);
+      margin-left: -3px;
+    }
+    .col-type {
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      color: var(--fg-muted);
+      font-size: 11px;
+      flex-shrink: 0;
+    }
+    .col-note {
+      padding: 0 16px 4px;
+      margin-top: -2px;
+      font-size: 11px;
+      color: var(--note-fg);
+      line-height: 1.4;
+    }
+    .pill {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      flex-shrink: 0;
+      font-family: -apple-system, sans-serif;
+    }
+    .pill.pk { background: var(--pk-bg); color: var(--pk-fg); }
+    .pill.fk { background: var(--fk-bg); color: var(--fk-fg); }
+    .pill.uk { background: var(--uk-bg); color: var(--uk-fg); }
+    .pill.nn { background: var(--nn-bg); color: var(--nn-fg); }
+
+    .extras {
+      padding: 6px 16px 10px;
+      border-top: 1px dashed var(--card-border);
+      font-size: 11px;
+      color: var(--fg-muted);
+      line-height: 1.5;
+    }
+    .extras .label {
+      font-weight: 600;
+      color: var(--fg);
+    }
+
+    .memo {
+      margin-top: auto;
+      border-top: 1px solid var(--card-border);
+      background: var(--memo-tint);
+      padding: 10px 12px 12px;
+    }
+    .memo-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      color: var(--fg-muted);
+      margin-bottom: 6px;
+    }
+    .memo-label .icon { opacity: 0.7; }
+    .memo textarea {
+      width: 100%;
+      border: 1px solid var(--card-border);
+      background: var(--memo-bg);
+      color: var(--fg);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-family: inherit;
+      font-size: 13px;
+      resize: vertical;
+      min-height: 60px;
+      line-height: 1.5;
+      transition: border-color 0.12s;
+    }
+    .memo textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .memo textarea::placeholder { color: var(--fg-faint); }
+    .saved-indicator {
+      font-size: 10px;
+      color: var(--fg-faint);
+      transition: color 0.2s;
+    }
+    .saved-indicator.saved { color: var(--saved-fg); }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(8px);
+      background: var(--fg);
+      color: var(--card-bg);
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 13px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.18s, transform 0.18s;
+      z-index: 100;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .legend {
+      padding: 0 24px 18px;
+      margin-top: -8px;
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      font-size: 11px;
+      color: var(--fg-muted);
+    }
+    .legend-item { display: flex; align-items: center; gap: 5px; }
+  </style>
+</head>
+<body>
+  <header class="app">
+    <div class="brand">Franchise Manager <span class="accent">·</span> Tables</div>
+    <div class="meta" id="meta"></div>
+    <div class="actions">
+      <input class="filter" id="filter" placeholder="테이블 / 컬럼 검색...">
+      <button class="ghost" id="btn-clear">메모 초기화</button>
+      <button class="primary" id="btn-export">피드백 복사</button>
+    </div>
+  </header>
+
+  <div class="legend">
+    <div class="legend-item"><span class="pill pk">PK</span> Primary Key</div>
+    <div class="legend-item"><span class="pill fk">FK</span> Foreign Key</div>
+    <div class="legend-item"><span class="pill uk">UK</span> Unique</div>
+    <div class="legend-item"><span class="col-name nullable">name</span> nullable</div>
+    <div class="legend-item">메모가 있는 테이블은 <strong style="color:var(--accent)">강조 테두리</strong>로 표시됩니다.</div>
+  </div>
+
+  <main id="canvas"></main>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const tables = [
+      {
+        name: 'brands',
+        description: '프랜차이즈 단위. 단일 매장이어도 1행 생성.',
+        columns: [
+          { name: 'id', type: 'UUID', flags: ['pk'] },
+          { name: 'name', type: 'TEXT' },
+          { name: 'business_number', type: 'TEXT', nullable: true, note: '사업자등록번호' },
+          { name: 'created_at', type: 'TIMESTAMPTZ' },
+          { name: 'updated_at', type: 'TIMESTAMPTZ' },
+          { name: 'archived_at', type: 'TIMESTAMPTZ', nullable: true, note: 'soft delete' }
+        ]
+      },
+      {
+        name: 'stores',
+        description: '가맹점. 소속 Brand는 brand_stores로 관리 (시간 차원 포함).',
+        columns: [
+          { name: 'id', type: 'UUID', flags: ['pk'] },
+          { name: 'code', type: 'TEXT', flags: ['uk'], note: 'Two Star 원장 가맹점 코드. 주문 인입 매칭 키' },
+          { name: 'name', type: 'TEXT' },
+          { name: 'address', type: 'JSONB', nullable: true, note: '{ text, latitude, longitude, road_address, postal_code } 형태' },
+          { name: 'created_at', type: 'TIMESTAMPTZ' },
+          { name: 'updated_at', type: 'TIMESTAMPTZ' },
+          { name: 'archived_at', type: 'TIMESTAMPTZ', nullable: true }
+        ],
+        extras: '리워드 제외는 point_policy로 표현 (예: default_rate_basis_points=0인 "제외" 정책). address는 Kakao Local API로 지오코딩.'
+      },
+      {
+        name: 'brand_stores',
+        description: 'Store ↔ Brand M:N (시간 차원). 같은 매장이 시간에 따라 다른 brand에 귀속될 수 있음.',
+        columns: [
+          { name: 'id', type: 'UUID', flags: ['pk'] },
+          { name: 'store_id', type: 'UUID', flags: ['fk'], note: '→ stores.id' },
+          { name: 'brand_id', type: 'UUID', flags: ['fk'], note: '→ brands.id' },
+          { name: 'effective_from', type: 'TIMESTAMPTZ', note: '효력 시작' },
+          { name: 'effective_to', type: 'TIMESTAMPTZ', nullable: true, note: 'NULL이면 현재 활성' },
+          { name: 'created_at', type: 'TIMESTAMPTZ' }
+        ],
+        extras: '부분 UNIQUE: (store_id) WHERE effective_to IS NULL — 한 시점에 store당 활성 brand 1개만'
+      },
+      {
+        name: 'users',
+        description: '리워드 조회·포인트 사용 신청 주체. role 없음.',
+        columns: [
+          { name: 'id', type: 'UUID', flags: ['pk'] },
+          { name: 'phone', type: 'TEXT', nullable: true, flags: ['uk'], note: 'E.164 권장. 카카오 단독 가입 시 NULL 허용' },
+          { name: 'password_hash', type: 'TEXT', nullable: true, note: 'argon2id' },
+          { name: 'kakao_user_id', type: 'TEXT', nullable: true, flags: ['uk'] },
+          { name: 'name', type: 'TEXT' },
+          { name: 'created_at', type: 'TIMESTAMPTZ' },
+          { name: 'updated_at', type: 'TIMESTAMPTZ' },
+          { name: 'archived_at', type: 'TIMESTAMPTZ', nullable: true }
+        ],
+        extras: 'CHECK: kakao_user_id IS NOT NULL OR (phone IS NOT NULL AND password_hash IS NOT NULL)'
+      },
+      {
+        name: 'brand_users',
+        description: 'User ↔ Brand M:N. Admin이 직접 관리 (별도 신청 워크플로 없음).',
+        columns: [
+          { name: 'id', type: 'UUID', flags: ['pk'] },
+          { name: 'user_id', type: 'UUID', flags: ['fk'], note: '→ users.id' },
+          { name: 'brand_id', type: 'UUID', flags: ['fk'], note: '→ brands.id' },
+          { name: 'granted_at', type: 'TIMESTAMPTZ', note: '권한 부여 시각' },
+          { name: 'revoked_at', type: 'TIMESTAMPTZ', nullable: true, note: 'NULL이면 활성' }
+        ],
+        extras: '부분 UNIQUE: (user_id, brand_id) WHERE revoked_at IS NULL — 활성 멤버십 1건만. Admin이 admin 화면에서 직접 INSERT/회수.'
+      },
+      {
+        name: 'admins',
+        description: '운영자.',
+        columns: [
+          { name: 'id', type: 'UUID', flags: ['pk'] },
+          { name: 'email', type: 'TEXT', flags: ['uk'] },
+          { name: 'password_hash', type: 'TEXT', note: 'argon2id' },
+          { name: 'name', type: 'TEXT' },
+          { name: 'role', type: 'TEXT', note: "CHECK IN ('super_admin', 'viewer')" },
+          { name: 'is_active', type: 'BOOLEAN' },
+          { name: 'created_at', type: 'TIMESTAMPTZ' },
+          { name: 'updated_at', type: 'TIMESTAMPTZ' }
+        ]
+      },
+      {
+        name: 'orders',
+        description: '가맹점 주문 1건. 리워드 산정의 트리거.',
+        columns: [
+          { name: 'id', type: 'UUID', flags: ['pk'] },
+          { name: 'store_id', type: 'UUID', flags: ['fk'], note: '→ stores.id' },
+          { name: 'external_order_number', type: 'TEXT', note: 'Two Star 원장 주문번호' },
+          { name: 'ordered_at', type: 'TIMESTAMPTZ', note: '실제 주문 시각 (리워드 산정 기준)' },
+          { name: 'amount', type: 'INTEGER', note: 'KRW, CHECK > 0' },
+          { name: 'attributes', type: 'JSONB', nullable: true, note: '외부 API 비정형 필드 (category, channel 등)' },
+          { name: 'source', type: 'TEXT', note: "CHECK IN ('manual_upload', 'external_api')" },
+          { name: 'status', type: 'TEXT', note: "CHECK IN ('active', 'canceled') DEFAULT 'active'" },
+          { name: 'received_at', type: 'TIMESTAMPTZ', note: '시스템 인입 시각' },
+          { name: 'canceled_at', type: 'TIMESTAMPTZ', nullable: true }
+        ],
+        extras: 'UNIQUE (store_id, external_order_number) — 중복 인입 방지'
+      },
+      {
+        name: 'point_ledger',
+        description: '포인트 원장 — 재무 진실만. 순수 append-only (예외 없음). 9 컬럼.',
+        columns: [
+          { name: 'id', type: 'BIGSERIAL', flags: ['pk'] },
+          { name: 'brand_id', type: 'UUID', flags: ['fk'], note: '→ brands.id' },
+          { name: 'delta', type: 'INTEGER', note: '양수=적립, 음수=차감' },
+          { name: 'kind', type: 'TEXT', note: 'credit_order, revert_order, debit_request, revert_request, adjust' },
+          { name: 'reference_type', type: 'TEXT', nullable: true, note: 'policy / ledger / request (adjust는 NULL)' },
+          { name: 'reference_id', type: 'UUID', nullable: true, note: 'kind에 따라 policy.id / ledger.id / request.id' },
+          { name: 'idempotency_key', type: 'TEXT', flags: ['uk'] },
+          { name: 'memo', type: 'TEXT', nullable: true, note: 'adjust 사유 (application에서 필수 강제)' },
+          { name: 'created_at', type: 'TIMESTAMPTZ' }
+        ],
+        extras: 'reference 매핑: credit_order→policy, revert_order→ledger, debit/revert_request→request, adjust→NULL. 적용 율은 delta÷amount로 역산.'
+      },
+      {
+        name: 'point_requests',
+        description: '포인트 사용 신청 워크플로 객체. status 가변 — 신청 → 완료/반려/취소/환원.',
+        columns: [
+          { name: 'id', type: 'UUID', flags: ['pk'] },
+          { name: 'user_id', type: 'UUID', flags: ['fk'], note: '→ users.id. 신청자' },
+          { name: 'brand_id', type: 'UUID', flags: ['fk'], note: '→ brands.id. 차감 대상 brand' },
+          { name: 'amount', type: 'INTEGER', note: '신청 금액 (양수), CHECK > 0' },
+          { name: 'request_method', type: 'TEXT', note: '지급 방식 코드' },
+          { name: 'status', type: 'TEXT', note: 'pending / completed / rejected / canceled / reverted' },
+          { name: 'decided_at', type: 'TIMESTAMPTZ', nullable: true },
+          { name: 'decided_by_admin_id', type: 'UUID', nullable: true, flags: ['fk'] },
+          { name: 'memo', type: 'TEXT', nullable: true, note: 'admin 노트 — 반려·취소·환원 사유 등. rejected 시 application에서 필수 강제' },
+          { name: 'requested_at', type: 'TIMESTAMPTZ' },
+          { name: 'updated_at', type: 'TIMESTAMPTZ' }
+        ],
+        extras: 'Pending 신청은 잔액에 영향 없음. 완료 처리 시 point_ledger에 debit_request 행 INSERT. method별 추가 정보는 외부에서 admin이 사용자와 직접 확인.'
+      }
+    ];
+
+    const groups = [
+      { title: '도메인 핵심 · 브랜드 / 매장 / 매핑',  tables: ['brands', 'stores', 'brand_stores'] },
+      { title: '사용자 · 멤버십 · 운영자',           tables: ['users', 'brand_users', 'admins'] },
+      { title: '주문',                              tables: ['orders'] },
+      { title: '포인트 원장 · 사용 신청',            tables: ['point_ledger', 'point_requests'] }
+    ];
+
+    const tableMap = Object.fromEntries(tables.map(t => [t.name, t]));
+
+    const STORAGE_KEY = 'franchise-manager-table-memos-v2';
+
+    function loadMemos() {
+      try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }
+      catch { return {}; }
+    }
+    function saveMemos(memos) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(memos));
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+      }[c]));
+    }
+
+    function renderCard(t, memos) {
+      const hasMemo = (memos[t.name] || '').trim().length > 0;
+      return `
+        <article class="table-card ${hasMemo ? 'has-memo' : ''}" data-name="${t.name}">
+          <header class="card-header">
+            <div class="card-titleblock">
+              <div class="card-title">${escapeHtml(t.name)}</div>
+              <div class="card-desc">${escapeHtml(t.description)}</div>
+            </div>
+            <div class="col-count">${t.columns.length} cols</div>
+          </header>
+          <div class="columns">
+            ${t.columns.map(c => `
+              <div class="column">
+                <div class="col-name ${c.nullable ? 'nullable' : ''}">
+                  <span>${escapeHtml(c.name)}</span>
+                  ${(c.flags || []).map(f => `<span class="pill ${f}">${f.toUpperCase()}</span>`).join('')}
+                </div>
+                <div class="col-type">${escapeHtml(c.type)}</div>
+              </div>
+              ${c.note ? `<div class="col-note">${escapeHtml(c.note)}</div>` : ''}
+            `).join('')}
+          </div>
+          ${t.extras ? `<div class="extras"><span class="label">📌</span> ${escapeHtml(t.extras)}</div>` : ''}
+          <div class="memo">
+            <div class="memo-label">
+              <span><span class="icon">📝</span> 메모 / 피드백</span>
+              <span class="saved-indicator" data-saved="${t.name}"></span>
+            </div>
+            <textarea
+              data-table="${t.name}"
+              placeholder="이 테이블에 대한 변경 요청 / 의견 / 질문 등을 작성하세요. 작성 후 우측 상단 '피드백 복사' 버튼으로 한 번에 내보낼 수 있습니다."
+            >${escapeHtml(memos[t.name] || '')}</textarea>
+          </div>
+        </article>`;
+    }
+
+    function render() {
+      const canvas = document.getElementById('canvas');
+      const memos = loadMemos();
+      canvas.innerHTML = groups.map(g => `
+        <section class="row-group">
+          <header class="group-title">${escapeHtml(g.title)}</header>
+          <div class="row" data-cols="${g.tables.length}">
+            ${g.tables.map(name => renderCard(tableMap[name], memos)).join('')}
+          </div>
+        </section>
+      `).join('');
+
+      // Attach memo handlers
+      document.querySelectorAll('textarea[data-table]').forEach(ta => {
+        let debounceTimer;
+        ta.addEventListener('input', () => {
+          const m = loadMemos();
+          m[ta.dataset.table] = ta.value;
+          saveMemos(m);
+
+          // visual: card highlight
+          const card = ta.closest('.table-card');
+          if (ta.value.trim()) card.classList.add('has-memo');
+          else card.classList.remove('has-memo');
+
+          // saved indicator
+          const indicator = document.querySelector(`[data-saved="${ta.dataset.table}"]`);
+          clearTimeout(debounceTimer);
+          debounceTimer = setTimeout(() => {
+            indicator.textContent = '저장됨';
+            indicator.classList.add('saved');
+            setTimeout(() => {
+              indicator.textContent = '';
+              indicator.classList.remove('saved');
+            }, 1400);
+          }, 250);
+        });
+      });
+
+      const totalCols = tables.reduce((s, t) => s + t.columns.length, 0);
+      document.getElementById('meta').textContent = `${tables.length} tables · ${totalCols} columns`;
+    }
+
+    function exportFeedback() {
+      const memos = loadMemos();
+      const filled = tables
+        .filter(t => (memos[t.name] || '').trim().length > 0)
+        .map(t => ({ name: t.name, memo: memos[t.name].trim() }));
+
+      if (filled.length === 0) {
+        showToast('작성된 메모가 없습니다');
+        return;
+      }
+
+      const lines = [
+        '## datamodel.md 피드백 — 테이블별 메모',
+        '',
+        `다음은 \`tables.html\`에서 작성한 ${filled.length}개 테이블에 대한 피드백입니다. 이 내용을 반영해 \`docs/datamodel.md\`를 업데이트해주세요.`,
+        ''
+      ];
+      for (const { name, memo } of filled) {
+        lines.push(`### \`${name}\``);
+        lines.push('');
+        // indent multi-line memos as blockquote
+        memo.split('\n').forEach(line => lines.push(`> ${line}`));
+        lines.push('');
+      }
+      const markdown = lines.join('\n');
+
+      navigator.clipboard.writeText(markdown).then(
+        () => showToast(`${filled.length}개 메모를 클립보드에 복사했습니다`),
+        () => {
+          // fallback: show in prompt
+          window.prompt('복사가 자동으로 안 되면 아래 내용을 직접 복사하세요:', markdown);
+        }
+      );
+    }
+
+    function clearAllMemos() {
+      const memos = loadMemos();
+      const filled = Object.values(memos).filter(v => (v || '').trim()).length;
+      if (filled === 0) {
+        showToast('초기화할 메모가 없습니다');
+        return;
+      }
+      if (!confirm(`작성된 메모 ${filled}개를 모두 삭제하시겠습니까?`)) return;
+      localStorage.removeItem(STORAGE_KEY);
+      render();
+      showToast('모든 메모를 초기화했습니다');
+    }
+
+    function showToast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.add('show');
+      clearTimeout(el._t);
+      el._t = setTimeout(() => el.classList.remove('show'), 2200);
+    }
+
+    function applyFilter() {
+      const q = document.getElementById('filter').value.trim().toLowerCase();
+      document.querySelectorAll('.table-card').forEach(card => {
+        if (!q) { card.classList.remove('hidden'); return; }
+        const text = card.textContent.toLowerCase();
+        card.classList.toggle('hidden', !text.includes(q));
+      });
+      // hide row groups that have no visible cards
+      document.querySelectorAll('.row-group').forEach(g => {
+        const anyVisible = g.querySelector('.table-card:not(.hidden)');
+        g.classList.toggle('hidden', !anyVisible);
+      });
+    }
+
+    document.getElementById('btn-export').onclick = exportFeedback;
+    document.getElementById('btn-clear').onclick = clearAllMemos;
+    document.getElementById('filter').addEventListener('input', applyFilter);
+
+    // Cmd/Ctrl + Enter to export
+    document.addEventListener('keydown', e => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        exportFeedback();
+      }
+    });
+
+    render();
+  </script>
+</body>
+</html>

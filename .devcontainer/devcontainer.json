@@ -1,0 +1,23 @@
+{
+  "name": "franchise-manager",
+  "dockerComposeFile": "../.docker/docker-compose.develop.yml",
+  "service": "workspace",
+  "workspaceFolder": "/app",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "anthropic.claude-code",
+        "ms-azuretools.vscode-docker"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.analysis.typeCheckingMode": "standard"
+      }
+    }
+  },
+
+  "remoteUser": "root"
+}
