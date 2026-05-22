@@ -7,6 +7,7 @@ __pycache__/
 .venv/
 
 # Env
+.env
 .env/*
 !.env/*.example
 
@@ -24,6 +25,9 @@ __pycache__/
 !.vscode/extensions.json
 !.vscode/launch.json
 !.vscode/tasks.json
+
+# Claude
+.claude/settings.local.json
 
 # OS
 .DS_Store

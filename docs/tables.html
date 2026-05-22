@@ -394,7 +394,7 @@
           { name: 'business_number', type: 'TEXT', nullable: true, note: '사업자등록번호' },
           { name: 'created_at', type: 'TIMESTAMPTZ' },
           { name: 'updated_at', type: 'TIMESTAMPTZ' },
-          { name: 'archived_at', type: 'TIMESTAMPTZ', nullable: true, note: 'soft delete' }
+          { name: 'deleted_at', type: 'TIMESTAMPTZ', nullable: true, note: '삭제 시각. NULL이면 활성' }
         ]
       },
       {
@@ -407,9 +407,9 @@
           { name: 'address', type: 'JSONB', nullable: true, note: '{ text, latitude, longitude, road_address, postal_code } 형태' },
           { name: 'created_at', type: 'TIMESTAMPTZ' },
           { name: 'updated_at', type: 'TIMESTAMPTZ' },
-          { name: 'archived_at', type: 'TIMESTAMPTZ', nullable: true }
+          { name: 'deleted_at', type: 'TIMESTAMPTZ', nullable: true, note: '삭제 시각. NULL이면 활성' }
         ],
-        extras: '리워드 제외는 point_policy로 표현 (예: default_rate_basis_points=0인 "제외" 정책). address는 Kakao Local API로 지오코딩.'
+        extras: '리워드 제외는 application 코드의 calculate_credit_rate(order)가 store_id로 분기 처리 (별도 정책 테이블 없음). address는 Kakao Local API로 지오코딩.'
       },
       {
         name: 'brand_stores',
@@ -418,8 +418,8 @@
           { name: 'id', type: 'UUID', flags: ['pk'] },
           { name: 'store_id', type: 'UUID', flags: ['fk'], note: '→ stores.id' },
           { name: 'brand_id', type: 'UUID', flags: ['fk'], note: '→ brands.id' },
-          { name: 'effective_from', type: 'TIMESTAMPTZ', note: '효력 시작' },
-          { name: 'effective_to', type: 'TIMESTAMPTZ', nullable: true, note: 'NULL이면 현재 활성' },
+          { name: 'effective_from', type: 'TIMESTAMPTZ', note: '효력 시작 (datamodel.md §1.4)' },
+          { name: 'effective_to', type: 'TIMESTAMPTZ', nullable: true, note: '효력 종료. NULL이면 현재 활성 (§1.4)' },
           { name: 'created_at', type: 'TIMESTAMPTZ' }
         ],
         extras: '부분 UNIQUE: (store_id) WHERE effective_to IS NULL — 한 시점에 store당 활성 brand 1개만'
@@ -429,15 +429,16 @@
         description: '리워드 조회·포인트 사용 신청 주체. role 없음.',
         columns: [
           { name: 'id', type: 'UUID', flags: ['pk'] },
-          { name: 'phone', type: 'TEXT', nullable: true, flags: ['uk'], note: 'E.164 권장. 카카오 단독 가입 시 NULL 허용' },
-          { name: 'password_hash', type: 'TEXT', nullable: true, note: 'argon2id' },
-          { name: 'kakao_user_id', type: 'TEXT', nullable: true, flags: ['uk'] },
+          { name: 'phone', type: 'TEXT', nullable: true, flags: ['uk'], note: 'E.164 권장. 카카오 단독 가입 시 NULL 허용. 부분 UNIQUE — 활성 사용자만' },
+          { name: 'password', type: 'PASSWORD', nullable: true, note: 'argon2id 해시 도메인 (TEXT 위 CHECK)' },
+          { name: 'kakao_user_id', type: 'TEXT', nullable: true, flags: ['uk'], note: '부분 UNIQUE — 활성 사용자만' },
           { name: 'name', type: 'TEXT' },
+          { name: 'refresh_token', type: 'TEXT', nullable: true, note: '활성 refresh token 의 fast hash (SHA-256 등). raw 금지. 단일 활성 — 다중 디바이스 미지원' },
           { name: 'created_at', type: 'TIMESTAMPTZ' },
           { name: 'updated_at', type: 'TIMESTAMPTZ' },
-          { name: 'archived_at', type: 'TIMESTAMPTZ', nullable: true }
+          { name: 'deleted_at', type: 'TIMESTAMPTZ', nullable: true, note: '탈퇴 시각. NULL이면 활성' }
         ],
-        extras: 'CHECK: kakao_user_id IS NOT NULL OR (phone IS NOT NULL AND password_hash IS NOT NULL)'
+        extras: 'CHECK: kakao_user_id IS NOT NULL OR (phone IS NOT NULL AND password IS NOT NULL). 부분 UNIQUE: (phone) / (kakao_user_id) WHERE deleted_at IS NULL — 탈퇴 후 동일 번호·카카오로 재가입 허용. PASSWORD 도메인은 argon2id 형식 CHECK 강제. PII 마스킹은 현재 미적용 (TBD).'
       },
       {
         name: 'brand_users',
@@ -446,24 +447,27 @@
           { name: 'id', type: 'UUID', flags: ['pk'] },
           { name: 'user_id', type: 'UUID', flags: ['fk'], note: '→ users.id' },
           { name: 'brand_id', type: 'UUID', flags: ['fk'], note: '→ brands.id' },
-          { name: 'granted_at', type: 'TIMESTAMPTZ', note: '권한 부여 시각' },
-          { name: 'revoked_at', type: 'TIMESTAMPTZ', nullable: true, note: 'NULL이면 활성' }
+          { name: 'effective_from', type: 'TIMESTAMPTZ', note: '효력 시작 (datamodel.md §1.4)' },
+          { name: 'effective_to', type: 'TIMESTAMPTZ', nullable: true, note: '효력 종료. NULL이면 현재 활성 (§1.4)' },
+          { name: 'created_at', type: 'TIMESTAMPTZ', note: 'row INSERT 시각 (DB DEFAULT now())' }
         ],
-        extras: '부분 UNIQUE: (user_id, brand_id) WHERE revoked_at IS NULL — 활성 멤버십 1건만. Admin이 admin 화면에서 직접 INSERT/회수.'
+        extras: '부분 UNIQUE: (user_id, brand_id) WHERE effective_to IS NULL — 활성 멤버십 1건만. brand_stores 와 동일한 시간 범위 패턴 (§1.4). effective_from (도메인 효력) ≠ created_at (DB INSERT) — 백데이팅 가능. Admin이 admin 화면에서 직접 INSERT/종료.'
       },
       {
         name: 'admins',
         description: '운영자.',
         columns: [
           { name: 'id', type: 'UUID', flags: ['pk'] },
-          { name: 'email', type: 'TEXT', flags: ['uk'] },
-          { name: 'password_hash', type: 'TEXT', note: 'argon2id' },
+          { name: 'email', type: 'TEXT', flags: ['uk'], note: '부분 UNIQUE — 활성 admin 만' },
+          { name: 'password', type: 'PASSWORD', note: 'argon2id 해시 도메인 (TEXT 위 CHECK)' },
           { name: 'name', type: 'TEXT' },
           { name: 'role', type: 'TEXT', note: "CHECK IN ('super_admin', 'viewer')" },
-          { name: 'is_active', type: 'BOOLEAN' },
+          { name: 'refresh_token', type: 'TEXT', nullable: true, note: '활성 refresh token 의 fast hash. raw 금지. 단일 활성' },
           { name: 'created_at', type: 'TIMESTAMPTZ' },
-          { name: 'updated_at', type: 'TIMESTAMPTZ' }
-        ]
+          { name: 'updated_at', type: 'TIMESTAMPTZ' },
+          { name: 'deleted_at', type: 'TIMESTAMPTZ', nullable: true, note: '삭제 시각. NULL이면 활성' }
+        ],
+        extras: '부분 UNIQUE: (email) WHERE deleted_at IS NULL — 활성 admin 의 email 만 유일. soft delete (hard delete 금지 — point_requests.decided_by_id (admin 참조 시) / audit_logs.actor_id 참조 보존). PASSWORD 도메인은 argon2id 형식 CHECK 강제 (datamodel.md §1.2).'
       },
       {
         name: 'orders',
@@ -472,31 +476,32 @@
           { name: 'id', type: 'UUID', flags: ['pk'] },
           { name: 'store_id', type: 'UUID', flags: ['fk'], note: '→ stores.id' },
           { name: 'external_order_number', type: 'TEXT', note: 'Two Star 원장 주문번호' },
-          { name: 'ordered_at', type: 'TIMESTAMPTZ', note: '실제 주문 시각 (리워드 산정 기준)' },
+          { name: 'ordered_at', type: 'TIMESTAMPTZ', note: '주문 시각 (리워드 산정 기준)' },
           { name: 'amount', type: 'INTEGER', note: 'KRW, CHECK > 0' },
           { name: 'attributes', type: 'JSONB', nullable: true, note: '외부 API 비정형 필드 (category, channel 등)' },
           { name: 'source', type: 'TEXT', note: "CHECK IN ('manual_upload', 'external_api')" },
           { name: 'status', type: 'TEXT', note: "CHECK IN ('active', 'canceled') DEFAULT 'active'" },
-          { name: 'received_at', type: 'TIMESTAMPTZ', note: '시스템 인입 시각' },
-          { name: 'canceled_at', type: 'TIMESTAMPTZ', nullable: true }
+          { name: 'received_at', type: 'TIMESTAMPTZ', note: '인입 시각 (application-set, API/파일 수신 시점)' },
+          { name: 'created_at', type: 'TIMESTAMPTZ', note: 'row INSERT 시각 (DB DEFAULT now())' },
+          { name: 'canceled_at', type: 'TIMESTAMPTZ', nullable: true, note: '취소 시각. NULL이면 활성' }
         ],
-        extras: 'UNIQUE (store_id, external_order_number) — 중복 인입 방지'
+        extras: 'UNIQUE (store_id, external_order_number) — 중복 인입 방지. 3-layer 시제: ordered_at (외부 발생) → received_at (시스템 수신) → created_at (DB INSERT). 두 구간 지연 분석 가능 — 자세히는 datamodel.md §5.3.'
       },
       {
-        name: 'point_ledger',
+        name: 'point_ledgers',
         description: '포인트 원장 — 재무 진실만. 순수 append-only (예외 없음). 9 컬럼.',
         columns: [
           { name: 'id', type: 'BIGSERIAL', flags: ['pk'] },
           { name: 'brand_id', type: 'UUID', flags: ['fk'], note: '→ brands.id' },
-          { name: 'delta', type: 'INTEGER', note: '양수=적립, 음수=차감' },
-          { name: 'kind', type: 'TEXT', note: 'credit_order, revert_order, debit_request, revert_request, adjust' },
-          { name: 'reference_type', type: 'TEXT', nullable: true, note: 'policy / ledger / request (adjust는 NULL)' },
-          { name: 'reference_id', type: 'UUID', nullable: true, note: 'kind에 따라 policy.id / ledger.id / request.id' },
+          { name: 'delta', type: 'INTEGER', note: '양수=적립, 음수=차감. type 과 부호 일관성 CHECK 강제 (extras)' },
+          { name: 'type', type: 'TEXT', note: 'credit_order / revert_request → delta > 0. revert_order / debit_request → delta < 0. adjust → delta ≠ 0' },
+          { name: 'reference_type', type: 'TEXT', nullable: true, note: 'ledger / request (credit_order·adjust는 NULL)' },
+          { name: 'reference_id', type: 'UUID', nullable: true, note: 'type에 따라 ledger.id / request.id (credit_order·adjust는 NULL)' },
           { name: 'idempotency_key', type: 'TEXT', flags: ['uk'] },
           { name: 'memo', type: 'TEXT', nullable: true, note: 'adjust 사유 (application에서 필수 강제)' },
           { name: 'created_at', type: 'TIMESTAMPTZ' }
         ],
-        extras: 'reference 매핑: credit_order→policy, revert_order→ledger, debit/revert_request→request, adjust→NULL. 적용 율은 delta÷amount로 역산.'
+        extras: 'reference 매핑: credit_order→NULL (원본 order_id는 idempotency_key에 보존), revert_order→ledger, debit/revert_request→request, adjust→NULL. CHECK 제약: (type IN (credit_order, revert_request) AND delta > 0) OR (type IN (revert_order, debit_request) AND delta < 0) OR (type = adjust AND delta ≠ 0) — 부호 실수로 인한 금전 사고 DB-level 차단. 적용 율은 delta÷amount로 역산. 적립 율은 application 코드의 calculate_credit_rate(order) 하드코딩 함수로 결정.'
       },
       {
         name: 'point_requests',
@@ -506,15 +511,50 @@
           { name: 'user_id', type: 'UUID', flags: ['fk'], note: '→ users.id. 신청자' },
           { name: 'brand_id', type: 'UUID', flags: ['fk'], note: '→ brands.id. 차감 대상 brand' },
           { name: 'amount', type: 'INTEGER', note: '신청 금액 (양수), CHECK > 0' },
-          { name: 'request_method', type: 'TEXT', note: '지급 방식 코드' },
+          { name: 'method', type: 'TEXT', note: '지급 방식 코드' },
+          { name: 'idempotency_key', type: 'UUID', note: '클라이언트 발급 멱등성 키 (UUID v4). 더블탭·재시도 차단. point_ledgers.idempotency_key와 동일 개념·다른 발급 주체' },
           { name: 'status', type: 'TEXT', note: 'pending / completed / rejected / canceled / reverted' },
-          { name: 'decided_at', type: 'TIMESTAMPTZ', nullable: true },
-          { name: 'decided_by_admin_id', type: 'UUID', nullable: true, flags: ['fk'] },
-          { name: 'memo', type: 'TEXT', nullable: true, note: 'admin 노트 — 반려·취소·환원 사유 등. rejected 시 application에서 필수 강제' },
-          { name: 'requested_at', type: 'TIMESTAMPTZ' },
+          { name: 'decided_at', type: 'TIMESTAMPTZ', nullable: true, note: '처리 시각. NULL이면 pending' },
+          { name: 'decided_by_type', type: 'TEXT', nullable: true, note: "CHECK IN ('user','admin'). 폴리모픽. status 와 동기 CHECK 강제 (extras)" },
+          { name: 'decided_by_id', type: 'UUID', nullable: true, note: 'user→users.id, admin→admins.id (폴리모픽 — FK 없음). DB-level CHECK: decided_at / decided_by_type / decided_by_id 3개 모두 NULL (status=pending) 또는 모두 NOT NULL (그 외 status)' },
+          { name: 'memo', type: 'TEXT', nullable: true, note: '처리 노트 — 반려·취소·환원 사유 등. rejected 시 application에서 필수 강제' },
+          { name: 'requested_at', type: 'TIMESTAMPTZ', note: '신청 시각 (application-set)' },
+          { name: 'created_at', type: 'TIMESTAMPTZ', note: 'row INSERT 시각 (DB DEFAULT now())' },
           { name: 'updated_at', type: 'TIMESTAMPTZ' }
         ],
-        extras: 'Pending 신청은 잔액에 영향 없음. 완료 처리 시 point_ledger에 debit_request 행 INSERT. method별 추가 정보는 외부에서 admin이 사용자와 직접 확인.'
+        extras: 'UNIQUE (user_id, idempotency_key) — 동일 user의 동일 키 재전송 차단. canceled 는 user (본인 취소) 또는 admin 양쪽 가능 → decided_by_type / decided_by_id 폴리모픽. CHECK 제약: status=pending ↔ decided_at·decided_by_type·decided_by_id 3개 모두 NULL (그 외 status 는 모두 NOT NULL). Pending 신청은 잔액에 영향 없음. 완료 처리 시 point_ledgers에 debit_request 행 INSERT (이 ledger INSERT 도 audit_logs 에 별도 audit). method별 추가 정보는 외부에서 admin이 사용자와 직접 확인.'
+      },
+      {
+        name: 'audit_logs',
+        description: '운영자·사용자 액션의 누가/언제/무엇을 추적. INSERT only. 폴리모픽 (target_type, target_id) 으로 모든 도메인 엔티티 참조.',
+        columns: [
+          { name: 'id', type: 'BIGSERIAL', flags: ['pk'] },
+          { name: 'occurred_at', type: 'TIMESTAMPTZ', note: '발생 시각 (application-set, 도메인 액션 시점)' },
+          { name: 'actor_type', type: 'TEXT', note: "CHECK IN ('admin','user','system'). actor_id 와 동기 CHECK 강제 (extras)" },
+          { name: 'actor_id', type: 'UUID', nullable: true, note: 'admin→admins.id, user→users.id, system→NULL (폴리모픽 — FK 없음). DB-level CHECK: actor_type=system ↔ actor_id IS NULL' },
+          { name: 'action', type: 'TEXT', note: '표준화된 verb. 복수형 테이블명 prefix. 모든 state-changing 액션 등재 (조회 GET 제외). 예: point_ledgers.adjust / .credit_order / .debit_request / .revert_order / .revert_request, orders.upload_batch / .external_ingest / .cancel / .credit_skipped(_batch_summary), point_requests.create / .decide, users.create / .update / .delete, admins.create / .update / .delete, brands.* / stores.*, brand_users.grant / .revoke, brand_stores.create / .terminate, admin_notifications.check, auth.login_success / .login_failure / .logout' },
+          { name: 'target_type', type: 'TEXT', note: '복수형 테이블명 또는 가상 엔티티 (order_batches). 폴리모픽' },
+          { name: 'target_id', type: 'TEXT', note: 'UUID/BIGINT → TEXT 통일' },
+          { name: 'before', type: 'JSONB', nullable: true, note: '변경 전 full row JSON (INSERT 시 NULL)' },
+          { name: 'after', type: 'JSONB', nullable: true, note: '변경 후 full row JSON (DELETE 시 NULL)' },
+          { name: 'request_id', type: 'UUID', note: 'HTTP 요청 상관 ID — 같은 요청의 row 묶기' },
+          { name: 'reason', type: 'TEXT', nullable: true, note: 'adjust 사유, credit_skipped 사유 (no_brand_mapping / rate_zero) 등' },
+          { name: 'context', type: 'JSONB', nullable: true, note: 'IP / user_agent / batch_size / file_name 등 부가 메타' },
+          { name: 'created_at', type: 'TIMESTAMPTZ', note: 'row INSERT 시각 (DB DEFAULT now())' }
+        ],
+        extras: 'INSERT only — UPDATE/DELETE 금지 (point_ledgers 동일). 같은 트랜잭션 내에서 도메인 변경과 함께 INSERT. 원칙: 모든 state-changing 액션이 audit_logs 에 기록 (조회 GET 제외). CHECK 제약: (actor_type=system AND actor_id IS NULL) OR (actor_type IN (admin,user) AND actor_id IS NOT NULL). occurred_at (application-set 발생) ≠ created_at (DB INSERT) — 보통 동일하나 backfill / 비동기 처리 시 분기. 주문 batch 등록은 target_type=order_batches 가상 엔티티 1행으로 묶어 row 폭증 방지. 정정은 새 row INSERT (action=audit.correction 등). 인덱스: (actor_type, actor_id, occurred_at DESC), (target_type, target_id, occurred_at DESC), (action, occurred_at DESC), (request_id), (occurred_at DESC).'
+      },
+      {
+        name: 'admin_notifications',
+        description: 'audit_logs의 부분집합에 대한 운영자 inbox. 본문은 audit_logs JOIN으로 획득.',
+        columns: [
+          { name: 'id', type: 'BIGSERIAL', flags: ['pk'] },
+          { name: 'audit_log_id', type: 'BIGINT', flags: ['fk', 'uk'], note: '→ audit_logs.id (1:1). UNIQUE — 동일 audit row 중복 알림 차단' },
+          { name: 'is_checked', type: 'BOOLEAN', note: 'DEFAULT FALSE. 운영자 확인 여부' },
+          { name: 'checked_at', type: 'TIMESTAMPTZ', nullable: true, note: '확인 시각. NULL이면 미확인' },
+          { name: 'created_at', type: 'TIMESTAMPTZ' }
+        ],
+        extras: 'NOTIFY 카탈로그는 application code의 set으로 관리 — schema migration 없음. INSERT 후 is_checked/checked_at만 UPDATE 가능, DELETE 허용 (오래된 checked 행 정리). severity/title/body 컬럼 없음 — 표시 데이터는 audit_logs JOIN으로 획득. row 단위가 아닌 batch summary action만 NOTIFY 대상 (예: orders.credit_skipped_batch_summary). acker (누가 ack 했나) 컬럼 없음 — admin_notifications.check audit action 으로 추적 (datamodel.md §4.9.2). 인덱스: (is_checked, created_at DESC).'
       }
     ];
 
@@ -522,7 +562,8 @@
       { title: '도메인 핵심 · 브랜드 / 매장 / 매핑',  tables: ['brands', 'stores', 'brand_stores'] },
       { title: '사용자 · 멤버십 · 운영자',           tables: ['users', 'brand_users', 'admins'] },
       { title: '주문',                              tables: ['orders'] },
-      { title: '포인트 원장 · 사용 신청',            tables: ['point_ledger', 'point_requests'] }
+      { title: '포인트 원장 · 사용 신청',            tables: ['point_ledgers', 'point_requests'] },
+      { title: '감사 · 알림',                       tables: ['audit_logs', 'admin_notifications'] }
     ];
 
     const tableMap = Object.fromEntries(tables.map(t => [t.name, t]));
