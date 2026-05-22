@@ -4,6 +4,8 @@
   "service": "workspace",
   "workspaceFolder": "/app",
 
+  "initializeCommand": ["sh", "${localWorkspaceFolder}/scripts/develop/devcontainer-initialize.sh"],
+
   "customizations": {
     "vscode": {
       "extensions": [
