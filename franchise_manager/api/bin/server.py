@@ -3,7 +3,8 @@ import os
 from franchise_manager.api.server.server import franchise_manager_api
 from franchise_manager.api.server.middleware import cors, proxy_headers
 from franchise_manager.api.server.router import Router
-from franchise_manager.api.endpoint.system import health
+from franchise_manager.api.endpoint import system
+from franchise_manager.api.endpoint import health
 
 
 # #
@@ -18,6 +19,13 @@ server.middleware(proxy_headers())
 # router
 server.router(
     Router(path="/health", methods=["GET"], endpoint=health)
+)
+# dev
+server.router(
+    Router(path="/dev/domain-map", methods=["GET"], endpoint=system.domain_map_page)
+)
+server.router(
+    Router(path="/dev/domain-map/data", methods=["GET"], endpoint=system.domain_map_data)
 )
 
 # app

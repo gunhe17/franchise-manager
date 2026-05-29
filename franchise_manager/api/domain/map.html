@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Domain Map · franchise_manager</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  /* ── canvas ───────────────────────────────────────────────── */
+  #map      { position: relative; height: calc(100vh - 61px); overflow: hidden; cursor: grab;
+              background: radial-gradient(rgba(15,23,42,.05) 1px, transparent 1px); background-size: 26px 26px; }
+  #mapWorld { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
+  #mapSvg   { position: absolute; top: 0; left: 0; overflow: visible; pointer-events: none; z-index: 5; }
+
+  /* ── glass node card (색상은 --accent/--tint/--text/--glow 커스텀 프로퍼티로 주입) ── */
+  .dm-node  { position: absolute; border-radius: 16px; background: rgba(255,255,255,.66);
+              border-top: 2px solid var(--accent);
+              box-shadow: 0 0 0 1px rgba(255,255,255,.6),
+                          0 10px 30px -12px var(--glow), 0 4px 14px -6px rgba(15,23,42,.12);
+              backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+              cursor: grab; user-select: none; touch-action: none;
+              transition: background .2s, box-shadow .2s; }
+  .dm-node.hub   { border-top-width: 3px; }                 /* 참조 대상(허브) */
+  .dm-node:hover { background: rgba(255,255,255,.82); }
+
+  .dm-head  { padding: 8px 13px; background: var(--tint);
+              border-bottom: 1px solid rgba(15,23,42,.06); border-radius: 15px 15px 0 0; }
+  .dm-titlebar { display: flex; align-items: center; gap: 6px; }
+  .dm-title { font-size: 14px; line-height: 18px; font-weight: 700; letter-spacing: -.01em; color: var(--text); }
+  .dm-kv    { font-size: 9px; font-weight: 700; letter-spacing: .04em; padding: 1px 6px;
+              border-radius: 9999px; background: var(--tint); color: var(--text); }
+  .dm-agg   { font-family: ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #94a3b8; }
+
+  .dm-body  { padding: 9px 13px; }
+  .dm-label { font-size: 10px; line-height: 16px; font-weight: 600; text-transform: uppercase;
+              letter-spacing: .05em; color: #94a3b8; }
+  .dm-list  { margin: 0; padding: 0; list-style: none; }
+  .dm-row   { display: flex; align-items: center; gap: 8px; height: 18px;
+              font-family: ui-monospace, monospace; font-size: 12px; }
+  .dm-vo    { color: #4b5563; }
+  .dm-vo.empty { color: #d1d5db; }
+  .dm-refs  { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(15,23,42,.06); }
+  .dm-ref   { gap: 6px; color: var(--text); }
+  .dm-ref.poly { color: #94a3b8; }
+  .dm-ref b { font-weight: 700; }
+  .dm-arrow { color: #94a3b8; }
+  .dm-dot   { display: inline-block; width: 6px; height: 6px; border-radius: 9999px; flex: 0 0 auto; }
+  .dm-dot.accent { background: var(--accent); }
+  .dm-dot.muted  { background: #cbd5e1; }
+
+  /* ── floating hint ───────────────────────────────────────── */
+  .dm-hint  { position: absolute; left: 16px; bottom: 16px; display: inline-flex; align-items: center;
+              gap: 8px; padding: 7px 14px; border-radius: 9999px; pointer-events: none;
+              background: rgba(255,255,255,.55); border: 1px solid rgba(255,255,255,.6);
+              box-shadow: 0 8px 24px -10px rgba(15,23,42,.22);
+              backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+              font-size: 11px; color: #64748b; }
+</style>
+</head>
+<body class="min-h-screen overflow-hidden text-slate-800 antialiased">
+
+<!-- ambient background -->
+<div class="pointer-events-none fixed inset-0 -z-10" style="background:
+  radial-gradient(55rem 45rem at 8% -12%, #dbeafe 0%, transparent 60%),
+  radial-gradient(50rem 45rem at 108% 6%, #ede9fe 0%, transparent 58%),
+  radial-gradient(45rem 40rem at 92% 118%, #ccfbf1 0%, transparent 55%),
+  radial-gradient(40rem 38rem at -6% 116%, #ffe4e6 0%, transparent 55%),
+  linear-gradient(180deg,#f8fafc,#eef2f7)"></div>
+
+<!-- glass header -->
+<header class="sticky top-0 z-20 flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-white/40 bg-white/55 px-6 py-3 backdrop-blur-2xl shadow-[0_1px_0_rgba(255,255,255,.7),0_10px_30px_-12px_rgba(15,23,42,.18)]">
+  <h1 class="text-[15px] font-semibold tracking-tight text-slate-900">Domain Map</h1>
+  <span class="font-mono text-xs text-slate-400">franchise_manager/api/domain</span>
+  <span class="flex-1"></span>
+  <button id="refresh" class="rounded-full border border-white/60 bg-white/55 px-4 py-2 text-sm font-semibold text-slate-700 shadow-[0_2px_10px_-2px_rgba(15,23,42,.15)] backdrop-blur-md transition hover:bg-white/85 active:scale-[.97]">↻ 새로고침</button>
+</header>
+
+<!-- full-bleed 2D map -->
+<main class="w-full"><div id="map"></div></main>
+
+<script>
+/* ──────────────────────────────────────────────────────────────
+   config
+   ────────────────────────────────────────────────────────────── */
+
+// 관련 도메인 = 하나의 클러스터(세로 열). FK 관계 기반 의미 그룹.
+const CLUSTERS = [
+  { title: "Brand · Store", names: ["brand", "store", "brand_store"] },
+  { title: "User",          names: ["user", "brand_user"] },
+  { title: "Order",         names: ["order"] },
+  { title: "Point",         names: ["point_request", "point_ledger"] },
+  { title: "Admin · Audit", names: ["admin", "admin_notification", "audit_log"] },
+  { title: "Setting",       names: ["setting"] },
+];
+
+// 클러스터별 메인 색(hue), 미소속은 OTHER_HUE
+const CLUSTER_HUE = {
+  "Brand · Store": { h: 217, s: 78 },   // blue
+  "User":          { h: 262, s: 58 },   // violet
+  "Order":         { h: 158, s: 60 },   // emerald
+  "Point":         { h: 30,  s: 80 },   // amber
+  "Admin · Audit": { h: 344, s: 68 },   // rose
+  "Setting":       { h: 200, s: 16 },   // slate
+};
+const OTHER_HUE = { h: 215, s: 12 };
+
+// 레이아웃 / 줌
+const CARD_W = 240, COL_GAP = 84, PAD = 24, V_GAP = 18;
+const ZOOM_MIN = 0.3, ZOOM_MAX = 2.5, ZOOM_STEP = 1.1;
+
+/* ──────────────────────────────────────────────────────────────
+   parse: {agg: {fname: content}} → 도메인 모델 (live/snapshot 공용)
+   ────────────────────────────────────────────────────────────── */
+function buildModel(rawAggregates) {
+  const names = new Set(rawAggregates.map(a => a.name));
+  const byName = {};
+
+  rawAggregates.forEach(agg => {
+    const entityFile = agg.files[`${agg.name}.py`] || "";
+    const repoFile = agg.files[`${agg.name}_repository.py`] || "";
+
+    const entityClass = (entityFile.match(/class\s+(\w+)\(Entity\)/) || [])[1] || null;
+
+    // FK: `xxx_id: UUID` → 폴더명 매칭으로 target 해석
+    const fks = [];
+    const fkRe = /^\s*(\w+_id)\s*:\s*UUID/gm;
+    let m;
+    while ((m = fkRe.exec(entityFile))) {
+      const field = m[1];
+      const target = field.replace(/_id$/, "");
+      fks.push({ field, target: names.has(target) ? target : null });
+    }
+
+    const isKV = /^\s*entity\s*=/m.test(repoFile);
+
+    const valueObjects = Object.keys(agg.files)
+      .filter(f => f.endsWith(".py")
+        && f !== `${agg.name}.py`
+        && f !== `${agg.name}_repository.py`
+        && f !== "__init__.py")
+      .map(f => f.replace(/\.py$/, ""))
+      .sort();
+
+    byName[agg.name] = { name: agg.name, entityClass, valueObjects, isKV, fks };
+  });
+
+  return byName;
+}
+
+/* ──────────────────────────────────────────────────────────────
+   color: 클러스터 메인 색 → 도메인별 명도 변형
+   ────────────────────────────────────────────────────────────── */
+let COLORS = {};
+
+function computeColors(byName) {
+  const colors = {};
+  const make = (h, s, L) => ({
+    accent: `hsl(${h} ${s}% ${L}%)`,
+    text: `hsl(${h} ${s}% ${Math.max(28, L - 14)}%)`,
+    tint: `hsl(${h} ${s}% ${L}% / 0.13)`,   // glass 헤더용 반투명
+    glow: `hsl(${h} ${s}% ${L}% / 0.28)`,   // 컬러 그림자
+  });
+
+  CLUSTERS.forEach(cl => {
+    const base = CLUSTER_HUE[cl.title] || OTHER_HUE;
+    const members = cl.names.filter(n => byName[n]);
+    const k = members.length;
+    members.forEach((n, i) => {
+      const L = 47 + (i - (k - 1) / 2) * 7;   // 클러스터 내 명도 분산
+      colors[n] = make(base.h, base.s, L);
+    });
+  });
+
+  // 클러스터 미소속(Others)
+  let oi = 0;
+  Object.keys(byName).forEach(n => {
+    if (!colors[n]) colors[n] = make(OTHER_HUE.h, OTHER_HUE.s, 48 + (oi++ - 1) * 6);
+  });
+
+  return colors;
+}
+
+/* ──────────────────────────────────────────────────────────────
+   node template (전체 필드 카드)
+   ────────────────────────────────────────────────────────────── */
+function nodeInnerHTML(a) {
+  const vo = a.valueObjects.length
+    ? a.valueObjects.map(v => `<li class="dm-row dm-vo"><span class="dm-dot accent"></span>${v}</li>`).join("")
+    : `<li class="dm-row dm-vo empty">—</li>`;
+
+  const refs = a.fks.length
+    ? `<div class="dm-refs"><div class="dm-label">References</div><ul class="dm-list">`
+      + a.fks.map(f => f.target
+          ? `<li data-fk="${a.name}:${f.field}" class="dm-row dm-ref"><span class="dm-dot accent"></span>${f.field}<span class="dm-arrow">→</span><b>${f.target}</b></li>`
+          : `<li class="dm-row dm-ref poly"><span class="dm-dot muted"></span>${f.field}<span>→</span>poly</li>`
+        ).join("")
+      + `</ul></div>`
+    : "";
+
+  return `
+    <div data-head class="dm-head">
+      <div class="dm-titlebar">
+        <span class="dm-title">${a.entityClass || a.name}</span>
+        ${a.isKV ? `<span class="dm-kv">KV</span>` : ""}
+      </div>
+      <div class="dm-agg">${a.name}/</div>
+    </div>
+    <div class="dm-body">
+      <div class="dm-label">Value Objects · ${a.valueObjects.length}</div>
+      <ul class="dm-list">${vo}</ul>
+      ${refs}
+    </div>`;
+}
+
+/* ──────────────────────────────────────────────────────────────
+   pan / zoom (뷰포트 transform — 한 번만 와이어링)
+   ────────────────────────────────────────────────────────────── */
+const MAP = { world: null, scale: 1, panX: 0, panY: 0 };
+
+function applyMapTransform() {
+  if (MAP.world) MAP.world.style.transform = `translate(${MAP.panX}px, ${MAP.panY}px) scale(${MAP.scale})`;
+}
+
+let mapWired = false;
+function wireMapViewport(map) {
+  if (mapWired) return;
+  mapWired = true;
+
+  // 빈 곳 드래그 → 패닝
+  let pan = null;
+  map.addEventListener("pointerdown", e => {
+    if (e.target.closest("[data-node]")) return;   // 노드는 자체 드래그
+    pan = { x: e.clientX, y: e.clientY, px: MAP.panX, py: MAP.panY };
+    map.style.cursor = "grabbing";
+  });
+  map.addEventListener("pointermove", e => {
+    if (!pan) return;
+    MAP.panX = pan.px + (e.clientX - pan.x);
+    MAP.panY = pan.py + (e.clientY - pan.y);
+    applyMapTransform();
+  });
+  window.addEventListener("pointerup", () => { if (pan) { pan = null; map.style.cursor = "grab"; } });
+
+  // 휠 → 커서 고정 줌
+  map.addEventListener("wheel", e => {
+    e.preventDefault();
+    const rect = map.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    const old = MAP.scale;
+    MAP.scale = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, old * (e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP)));
+    MAP.panX = mx - (mx - MAP.panX) / old * MAP.scale;
+    MAP.panY = my - (my - MAP.panY) / old * MAP.scale;
+    applyMapTransform();
+  }, { passive: false });
+}
+
+/* ──────────────────────────────────────────────────────────────
+   render: 2D 관계 맵
+   - 기본 배치: 클러스터 = 세로 열, 클러스터들은 가로로 나란히
+   - 연결: FK 필드 행 → 참조 대상 테이블 헤더(식별자), 위치 기반 재계산
+   - 높이 영향 스타일은 <style>(동기 적용) → offsetHeight 측정 정확
+   ────────────────────────────────────────────────────────────── */
+function renderMap(byName) {
+  const names = Object.keys(byName);
+
+  // 클러스터 열/순서 좌표
+  const slot = {};
+  CLUSTERS.forEach((cl, col) => cl.names.forEach((n, ord) => { slot[n] = { col, ord }; }));
+  let otherOrd = 0;
+  names.forEach(n => { if (!slot[n]) slot[n] = { col: CLUSTERS.length, ord: otherOrd++ }; });
+
+  // in-degree → 허브(참조 대상) 강조
+  const indeg = {};
+  names.forEach(n => byName[n].fks.forEach(f => {
+    if (f.target && byName[f.target]) indeg[f.target] = (indeg[f.target] || 0) + 1;
+  }));
+
+  // DOM 구성: world(svg + 노드) + hint
+  const nodes = names.map(n => {
+    const c = COLORS[n];
+    const cls = "dm-node" + (indeg[n] ? " hub" : "");
+    return `<div data-node="${n}" class="${cls}" style="--accent:${c.accent};--tint:${c.tint};--text:${c.text};--glow:${c.glow};width:${CARD_W}px">${nodeInnerHTML(byName[n])}</div>`;
+  }).join("");
+
+  const map = document.getElementById("map");
+  map.innerHTML =
+    `<div id="mapWorld"><svg id="mapSvg"></svg>${nodes}</div>` +
+    `<div class="dm-hint">카드 드래그 이동 · 빈 곳 드래그 화면 이동 · 휠 확대/축소</div>`;
+
+  const world = document.getElementById("mapWorld");
+  const svg = document.getElementById("mapSvg");
+  MAP.world = world;
+  MAP.scale = 1; MAP.panX = 0; MAP.panY = 0;
+  applyMapTransform();
+
+  // 초기 위치: 클러스터별 한 열에 세로 스택 (측정 높이 기반)
+  const byCol = {};
+  names.forEach(n => (byCol[slot[n].col] = byCol[slot[n].col] || []).push(n));
+  Object.values(byCol).forEach(arr => arr.sort((a, b) => slot[a].ord - slot[b].ord));
+
+  const pos = {};
+  const cols = Object.keys(byCol).map(Number).sort((a, b) => a - b);
+  let maxBottom = 0;
+  cols.forEach(col => {
+    const x = PAD + col * (CARD_W + COL_GAP);
+    let y = PAD;
+    byCol[col].forEach(n => {
+      const el = world.querySelector(`[data-node="${n}"]`);
+      pos[n] = { x, y };
+      el.style.left = x + "px";
+      el.style.top = y + "px";
+      y += el.offsetHeight + V_GAP;
+    });
+    maxBottom = Math.max(maxBottom, y);
+  });
+
+  const numCols = cols.length ? cols[cols.length - 1] + 1 : 0;
+  svg.setAttribute("width", PAD * 2 + numCols * (CARD_W + COL_GAP));
+  svg.setAttribute("height", maxBottom + PAD);
+
+  // 선: 위치(pos) + 카드 내부 offset으로 재계산 (transform/zoom 무관)
+  const anchorY = el => el.offsetTop + el.offsetHeight / 2;
+  function drawLines() {
+    const paths = [];
+    names.forEach(n => byName[n].fks.forEach(f => {
+      if (!f.target || !pos[f.target]) return;
+      const tCard = world.querySelector(`[data-node="${f.target}"]`);
+      const li = world.querySelector(`[data-fk="${n}:${f.field}"]`);
+      const head = tCard && tCard.querySelector("[data-head]");
+      if (!li || !head) return;
+
+      const sy = pos[n].y + anchorY(li);            // 소스 = FK 필드 행
+      const ty = pos[f.target].y + anchorY(head);   // 대상 = 테이블 헤더(식별자)
+      const sCx = pos[n].x + CARD_W / 2, tCx = pos[f.target].x + CARD_W / 2;
+      const sideS = tCx >= sCx ? 1 : -1, sideT = -sideS;
+      const sx = sideS > 0 ? pos[n].x + CARD_W : pos[n].x;
+      const tx = sideT > 0 ? pos[f.target].x + CARD_W : pos[f.target].x;
+      const off = Math.max(34, Math.abs(tx - sx) * 0.35);
+      const stroke = (COLORS[n] || {}).accent || "#2563eb";
+      paths.push(`<path d="M ${sx} ${sy} C ${sx + sideS * off} ${sy}, ${tx + sideT * off} ${ty}, ${tx} ${ty}" fill="none" stroke="${stroke}" stroke-width="1.6" stroke-opacity="0.7" marker-end="url(#arr)"><title>${n}.${f.field} → ${f.target}.id</title></path>`);
+    }));
+    svg.innerHTML =
+      `<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>`
+      + paths.join("");
+  }
+  drawLines();
+
+  // 카드 드래그 → 위치 갱신 + 선 재계산
+  let drag = null;
+  world.addEventListener("pointerdown", e => {
+    const node = e.target.closest("[data-node]");
+    if (!node) return;
+    const name = node.dataset.node;
+    drag = { node, name, sx: e.clientX, sy: e.clientY, ox: pos[name].x, oy: pos[name].y };
+    node.setPointerCapture(e.pointerId);
+    node.style.cursor = "grabbing";
+    node.style.zIndex = "50";
+  });
+  world.addEventListener("pointermove", e => {
+    if (!drag) return;
+    pos[drag.name].x = drag.ox + (e.clientX - drag.sx) / MAP.scale;
+    pos[drag.name].y = drag.oy + (e.clientY - drag.sy) / MAP.scale;
+    drag.node.style.left = pos[drag.name].x + "px";
+    drag.node.style.top = pos[drag.name].y + "px";
+    drawLines();
+  });
+  world.addEventListener("pointerup", e => {
+    if (!drag) return;
+    drag.node.style.cursor = "grab";
+    drag.node.style.zIndex = "";
+    try { drag.node.releasePointerCapture(e.pointerId); } catch (_) {}
+    drag = null;
+  });
+
+  wireMapViewport(map);
+}
+
+function render(byName) {
+  COLORS = computeColors(byName);
+  renderMap(byName);
+}
+
+/* ──────────────────────────────────────────────────────────────
+   data source: 실제 파일 읽기(새로고침) + 스냅샷 폴백
+   ────────────────────────────────────────────────────────────── */
+// dev 서버(/dev/domain-map)가 domain/을 실시간 스캔해 내려주는 raw를 받아 렌더.
+// buildModel이 그대로 소비 → 페이지 새로고침/↻ = 항상 현재 소스 반영.
+async function refresh() {
+  try {
+    const raw = await (await fetch("/dev/domain-map/data")).json();
+    if (raw.length) render(buildModel(raw));
+  } catch (e) {
+    /* 서버 밖에서 파일로 직접 열림 → SNAPSHOT 유지 */
+  }
+}
+
+// 작성 시점 구조 (buildModel 통과). 새로고침으로 실제 파일을 읽기 전 초기 화면.
+const SNAPSHOT = [
+  { name: "admin", files: {
+    "admin.py": "class Admin(Entity):\n    email: Email\n    password: Password\n",
+    "admin_repository.py": "async def find_by_email(self, *, session, email):",
+    "email.py": "", "name.py": "", "password.py": "", "refresh_token.py": "", "role.py": "" } },
+  { name: "admin_notification", files: {
+    "admin_notification.py": "class AdminNotification(Entity):\n    audit_log_id: UUID\n",
+    "admin_notification_repository.py": "async def find_unchecked(self):",
+    "checked_at.py": "", "is_checked.py": "" } },
+  { name: "audit_log", files: {
+    "audit_log.py": "class AuditLog(Entity):\n    actor_id: UUID\n    request_id: UUID\n",
+    "audit_log_repository.py": "async def find_by_action(self):\n    async def find_by_target(self):",
+    "action.py": "", "actor_type.py": "", "after.py": "", "before.py": "", "context.py": "",
+    "occurred_at.py": "", "reason.py": "", "target_id.py": "", "target_type.py": "" } },
+  { name: "brand", files: {
+    "brand.py": "class Brand(Entity):\n    name: Name\n",
+    "brand_repository.py": "",
+    "business_number.py": "", "name.py": "" } },
+  { name: "brand_store", files: {
+    "brand_store.py": "class BrandStore(Entity):\n    store_id: UUID\n    brand_id: UUID\n",
+    "brand_store_repository.py": "async def find_active_by_store(self):\n    async def find_active_by_brand(self):",
+    "effective_from.py": "", "effective_to.py": "" } },
+  { name: "brand_user", files: {
+    "brand_user.py": "class BrandUser(Entity):\n    user_id: UUID\n    brand_id: UUID\n",
+    "brand_user_repository.py": "async def find_active_by_user(self):\n    async def find_active_by_brand(self):",
+    "effective_from.py": "", "effective_to.py": "" } },
+  { name: "order", files: {
+    "order.py": "class Order(Entity):\n    store_id: UUID\n",
+    "order_repository.py": "async def find_by_store(self):",
+    "amount.py": "", "attributes.py": "", "canceled_at.py": "", "external_order_number.py": "",
+    "ordered_at.py": "", "received_at.py": "", "source.py": "", "status.py": "" } },
+  { name: "point_ledger", files: {
+    "point_ledger.py": "class PointLedger(Entity):\n    brand_id: UUID\n    reference_id: UUID\n",
+    "point_ledger_repository.py": "async def find_by_brand(self):",
+    "delta.py": "", "idempotency_key.py": "", "memo.py": "", "point_type.py": "", "reference_type.py": "" } },
+  { name: "point_request", files: {
+    "point_request.py": "class PointRequest(Entity):\n    user_id: UUID\n    brand_id: UUID\n    decided_by_id: UUID\n",
+    "point_request_repository.py": "async def find_by_user(self):\n    async def find_by_brand(self):",
+    "amount.py": "", "decided_at.py": "", "decider_type.py": "", "memo.py": "", "method.py": "",
+    "requested_at.py": "", "status.py": "" } },
+  { name: "setting", files: {
+    "setting.py": "class Setting(Entity):\n    key: Key\n",
+    "setting_repository.py": "    entity = Setting",
+    "key.py": "", "value.py": "" } },
+  { name: "store", files: {
+    "store.py": "class Store(Entity):\n    code: Code\n",
+    "store_repository.py": "async def find_by_code(self):",
+    "address.py": "", "code.py": "", "name.py": "" } },
+  { name: "user", files: {
+    "user.py": "class User(Entity):\n    name: Name\n",
+    "user_repository.py": "async def find_by_phone(self):\n    async def find_by_kakao_user_id(self):",
+    "kakao_user_id.py": "", "name.py": "", "password.py": "", "phone.py": "", "refresh_token.py": "" } },
+];
+
+/* ──────────────────────────────────────────────────────────────
+   bootstrap
+   ────────────────────────────────────────────────────────────── */
+document.getElementById("refresh").addEventListener("click", refresh);
+render(buildModel(SNAPSHOT));   // 초기: 오프라인 폴백(서버 밖에서 열 때)
+refresh();                       // 서버로 서빙되면 즉시 라이브 데이터로 교체
+</script>
+</body>
+</html>

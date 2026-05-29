@@ -32,6 +32,11 @@ def get_app_config() -> AppConfig:
     config = DefaultAppConfig()
     return config
 
+def is_develop() -> bool:
+    return (
+        DefaultAppConfig().APPLICATION_ENVIRONMENT == Env("develop")
+    )
+
 
 # #
 # postgres
