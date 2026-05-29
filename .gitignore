@@ -28,6 +28,8 @@ __pycache__/
 
 # Claude
 .claude/settings.local.json
+.claude/.credentials.json
+.claude.json
 
 # OS
 .DS_Store

@@ -9,7 +9,7 @@ services:
     volumes:
       # bind
       - ..:/app
-      - ~/.claude.json:/root/.claude.json # to share login
+      - ~/.claude.json:/root/.claude.json # share account/config (auth token is NOT here — login once inside)
       # volume
       - claude-config:/root/.claude
       - vscode-server:/root/.vscode-server

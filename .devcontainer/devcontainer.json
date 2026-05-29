@@ -1,10 +1,12 @@
 {
   "name": "franchise-manager",
-  "dockerComposeFile": "../.docker/docker-compose.develop.yml",
   "service": "workspace",
+
   "workspaceFolder": "/app",
+  "dockerComposeFile": "../.docker/docker-compose.develop.yml",
 
   "initializeCommand": ["sh", "${localWorkspaceFolder}/scripts/develop/devcontainer-initialize.sh"],
+  "postCreateCommand": ["sh", "${containerWorkspaceFolder}/scripts/develop/devcontainer-postcreate.sh"],
 
   "customizations": {
     "vscode": {
@@ -21,5 +23,8 @@
     }
   },
 
-  "remoteUser": "root"
+  "remoteUser": "root",
+  "remoteEnv": {
+    "PATH": "/root/.local/bin:${containerEnv:PATH}"
+  }
 }
