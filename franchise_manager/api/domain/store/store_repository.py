@@ -1,35 +1,31 @@
 from __future__ import annotations
 
-from abc import abstractmethod
 from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import DateTime, String, Uuid, func
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
-from franchise_manager.api.core.model import Base
-from franchise_manager.api.core.repository import Repository
+from franchise_manager.api.core.model import Model
 
 from franchise_manager.api.domain.store.store import Store
-from franchise_manager.api.domain.store.code import Code
 from franchise_manager.api.domain.store.name import Name
+from franchise_manager.api.domain.store.address import Address
+
+from franchise_manager.api.infrastructure.postgresql.repository import PostgresRepository
 
 
 # #
 # model
 
-class StoreModel(Base):
+class StoreModel(Model):
     __tablename__ = "stores"
 
     id: Mapped[UUID] = mapped_column(
         Uuid,
         primary_key=True,
-    )
-    code: Mapped[str] = mapped_column(
-        String,
-        nullable=False,
-        unique=True,
     )
     name: Mapped[str] = mapped_column(
         String,
@@ -56,16 +52,34 @@ class StoreModel(Base):
 
 
 # #
+# mapper
+
+def _to_store(model: StoreModel) -> Store:
+    store = Store(
+        id=model.id,
+        name=Name.from_str(model.name),
+        address=Address.from_dict(model.address) if model.address else None,
+        by_factory=True,
+    )
+    return store
+
+
+# #
 # repository
 
-class StoreRepository(Repository[Store]):
+class StoreRepository(PostgresRepository[Store, StoreModel]):
+    model = StoreModel
+    mapper = _to_store
+
     # #
     # read
 
-    @abstractmethod
-    async def find_by_code(self, code: Code) -> Store | None:
-        ...
+    async def filter_by_name(self, *, session: AsyncSession, name: Name) -> list[Store]:
+        stores = await self._filter_by(session=session, column="name", value=name.to_str())
+        return stores
 
-    @abstractmethod
-    async def get_filtered_by_name(self, name: Name) -> list[Store]:
-        ...
+
+# #
+# StoreRepository
+
+store_repository = StoreRepository()  # type: ignore[call-arg]

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from franchise_manager.api.core.value_object import ValueObject
+from franchise_manager.api.domain.common.exception import InvalidError, InvalidFormatError
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -20,7 +21,7 @@ class Address(ValueObject):
     def from_dict(cls, value) -> "Address":
         # type
         if not isinstance(value, dict):
-            raise  # InvalidError
+            raise InvalidError("Address")
 
         # components
         text = value.get("text")
@@ -31,23 +32,23 @@ class Address(ValueObject):
 
         # required
         if not isinstance(text, str) or not text.strip():
-            raise  # InvalidFormatError
+            raise InvalidFormatError("Address.text")
         if not isinstance(latitude, (int, float)):
-            raise  # InvalidFormatError
+            raise InvalidFormatError("Address.latitude")
         if not isinstance(longitude, (int, float)):
-            raise  # InvalidFormatError
+            raise InvalidFormatError("Address.longitude")
 
         # range
         if not (-90.0 <= float(latitude) <= 90.0):
-            raise  # InvalidFormatError
+            raise InvalidFormatError("Address.latitude (range)")
         if not (-180.0 <= float(longitude) <= 180.0):
-            raise  # InvalidFormatError
+            raise InvalidFormatError("Address.longitude (range)")
 
         # optional
         if road_address is not None and not isinstance(road_address, str):
-            raise  # InvalidFormatError
+            raise InvalidFormatError("Address.road_address")
         if postal_code is not None and not isinstance(postal_code, str):
-            raise  # InvalidFormatError
+            raise InvalidFormatError("Address.postal_code")
 
         return cls(
             _text=text,
