@@ -1,0 +1,12 @@
+from franchise_manager.api.domain.admin.admin_repository import AdminModel  # noqa: F401
+from franchise_manager.api.domain.admin_notification.admin_notification_repository import AdminNotificationModel  # noqa: F401
+from franchise_manager.api.domain.audit_log.audit_log_repository import AuditLogModel  # noqa: F401
+from franchise_manager.api.domain.brand.brand_repository import BrandModel  # noqa: F401
+from franchise_manager.api.domain.brand_store.brand_store_repository import BrandStoreModel  # noqa: F401
+from franchise_manager.api.domain.brand_user.brand_user_repository import BrandUserModel  # noqa: F401
+from franchise_manager.api.domain.order.order_repository import OrderModel  # noqa: F401
+from franchise_manager.api.domain.point_ledger.point_ledger_repository import PointLedgerModel  # noqa: F401
+from franchise_manager.api.domain.point_request.point_request_repository import PointRequestModel  # noqa: F401
+from franchise_manager.api.domain.setting.setting_repository import SettingModel  # noqa: F401
+from franchise_manager.api.domain.store.store_repository import StoreModel  # noqa: F401
+from franchise_manager.api.domain.user.user_repository import UserModel  # noqa: F401
