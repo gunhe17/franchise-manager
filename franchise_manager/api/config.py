@@ -2,6 +2,35 @@ from __future__ import annotations
 
 import os
 from abc import ABC, abstractmethod
+from enum import StrEnum
+
+
+# #
+# environment
+
+class Env(StrEnum):
+    DEVELOP = "develop"
+    TEST = "test"
+    STAGING = "staging"
+    PRODUCTION = "production"
+
+
+class AppConfig(ABC):
+    @property
+    @abstractmethod
+    def APPLICATION_ENVIRONMENT(self) -> Env: ...
+
+
+class DefaultAppConfig(AppConfig):
+    @property
+    def APPLICATION_ENVIRONMENT(self) -> Env:
+        raw = os.environ.get("APP_ENV", Env.DEVELOP.value)
+        return Env(raw)
+
+
+def get_app_config() -> AppConfig:
+    config = DefaultAppConfig()
+    return config
 
 
 # #
@@ -60,7 +89,13 @@ class DevelopPostgresConfig(PostgresConfig):
 
 
 def get_postgres_config() -> PostgresConfig:
-    config = DevelopPostgresConfig()
+    env = get_app_config().APPLICATION_ENVIRONMENT
+    if env == Env.DEVELOP:
+        config = DevelopPostgresConfig()
+    elif env == Env.TEST:
+        config = TestPostgresConfig()
+    else:
+        raise NotImplementedError(f"postgres config not implemented for env={env}")
     return config
 
 
@@ -132,6 +167,10 @@ class Cafe24Config(ABC):
 
     @property
     @abstractmethod
+    def CAFE24_OAUTH_STATE_TTL_SEC(self) -> int: ...
+
+    @property
+    @abstractmethod
     def CAFE24_REFRESH_KEY(self) -> str: ...
 
     @property
@@ -173,6 +212,10 @@ class DevelopCafe24Config(Cafe24Config):
         return 300
 
     @property
+    def CAFE24_OAUTH_STATE_TTL_SEC(self) -> int:
+        return 600
+
+    @property
     def CAFE24_REFRESH_KEY(self) -> str:
         return "cafe24_refresh_token"
 
@@ -182,5 +225,9 @@ class DevelopCafe24Config(Cafe24Config):
 
 
 def get_cafe24_config() -> Cafe24Config:
-    config = DevelopCafe24Config()
+    env = get_app_config().APPLICATION_ENVIRONMENT
+    if env == Env.DEVELOP:
+        config = DevelopCafe24Config()
+    else:
+        raise NotImplementedError(f"cafe24 config not implemented for env={env}")
     return config
