@@ -36,7 +36,8 @@ class User(Entity):
     ) -> "User":
         # auth
         if kakao_user_id is None and (phone is None or password is None):
-            raise  # InvalidAuthCredentialError
+            from franchise_manager.api.domain.common.exception import InvalidAuthCredentialError
+            raise InvalidAuthCredentialError()
 
         user = cls(
             name=name,
@@ -55,18 +56,34 @@ class User(Entity):
         return {
             "id": str(self.id),
             "name": self.name.to_str(),
-            "phone": self.phone.to_str() if self.phone else None,
-            "password": self.password.to_str() if self.password else None,
-            "kakao_user_id": self.kakao_user_id.to_str() if self.kakao_user_id else None,
-            "refresh_token": self.refresh_token.to_str() if self.refresh_token else None,
+            "phone": (
+                self.phone.to_str() if self.phone else None
+            ),
+            "password": (
+                self.password.to_str() if self.password else None
+            ),
+            "kakao_user_id": (
+                self.kakao_user_id.to_str() if self.kakao_user_id else None
+            ),
+            "refresh_token": (
+                self.refresh_token.to_str() if self.refresh_token else None
+            ),
         }
 
     def to_model(self):
         return {
             "id": self.id,
             "name": self.name.to_str(),
-            "phone": self.phone.to_str() if self.phone else None,
-            "password": self.password.to_str() if self.password else None,
-            "kakao_user_id": self.kakao_user_id.to_str() if self.kakao_user_id else None,
-            "refresh_token": self.refresh_token.to_str() if self.refresh_token else None,
+            "phone": (
+                self.phone.to_str() if self.phone else None
+            ),
+            "password": (
+                self.password.to_str() if self.password else None
+            ),
+            "kakao_user_id": (
+                self.kakao_user_id.to_str() if self.kakao_user_id else None
+            ),
+            "refresh_token": (
+                self.refresh_token.to_str() if self.refresh_token else None
+            ),
         }

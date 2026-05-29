@@ -1,24 +1,28 @@
 from __future__ import annotations
 
-from abc import abstractmethod
 from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import CheckConstraint, DateTime, Index, String, Uuid, func, text
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
-from franchise_manager.api.core.model import Base
-from franchise_manager.api.core.repository import Repository
+from franchise_manager.api.core.model import Model
 
 from franchise_manager.api.domain.user.user import User
+from franchise_manager.api.domain.user.name import Name
 from franchise_manager.api.domain.user.phone import Phone
+from franchise_manager.api.domain.user.password import Password
 from franchise_manager.api.domain.user.kakao_user_id import KakaoUserId
+from franchise_manager.api.domain.user.refresh_token import RefreshToken
+
+from franchise_manager.api.infrastructure.postgresql.repository import PostgresRepository
 
 
 # #
 # model
 
-class UserModel(Base):
+class UserModel(Model):
     __tablename__ = "users"
 
     id: Mapped[UUID] = mapped_column(
@@ -81,16 +85,41 @@ class UserModel(Base):
 
 
 # #
+# mapper
+
+def _to_user(model: UserModel) -> User:
+    user = User(
+        id=model.id,
+        name=Name.from_str(model.name),
+        phone=Phone.from_str(model.phone) if model.phone else None,
+        password=Password.from_str(model.password) if model.password else None,
+        kakao_user_id=KakaoUserId.from_str(model.kakao_user_id) if model.kakao_user_id else None,
+        refresh_token=RefreshToken.from_str(model.refresh_token) if model.refresh_token else None,
+        by_factory=True,
+    )
+    return user
+
+
+# #
 # repository
 
-class UserRepository(Repository[User]):
+class UserRepository(PostgresRepository[User, UserModel]):
+    model = UserModel
+    mapper = _to_user
+
     # #
     # read
 
-    @abstractmethod
-    async def find_by_phone(self, phone: Phone) -> User | None:
-        ...
+    async def find_by_phone(self, *, session: AsyncSession, phone: Phone) -> User | None:
+        user = await self._find_by(session=session, column="phone", value=phone.to_str())
+        return user
 
-    @abstractmethod
-    async def find_by_kakao_user_id(self, kakao_user_id: KakaoUserId) -> User | None:
-        ...
+    async def find_by_kakao_user_id(self, *, session: AsyncSession, kakao_user_id: KakaoUserId) -> User | None:
+        user = await self._find_by(session=session, column="kakao_user_id", value=kakao_user_id.to_str())
+        return user
+
+
+# #
+# UserRepository
+
+user_repository = UserRepository()  # type: ignore[call-arg]
