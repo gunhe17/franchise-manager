@@ -39,12 +39,16 @@ class Brand(Entity):
         return {
             "id": str(self.id),
             "name": self.name.to_str(),
-            "business_number": self.business_number.to_str() if self.business_number else None,
+            "business_number": (
+                self.business_number.to_str() if self.business_number else None
+            ),
         }
 
     def to_model(self):
         return {
             "id": self.id,
             "name": self.name.to_str(),
-            "business_number": self.business_number.to_str() if self.business_number else None,
+            "business_number": (
+                self.business_number.to_str() if self.business_number else None
+            ),
         }

@@ -3,19 +3,22 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import DateTime, String, Uuid, func
+from sqlalchemy import DateTime, Index, String, Uuid, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from franchise_manager.api.core.model import Base
-from franchise_manager.api.core.repository import Repository
+from franchise_manager.api.core.model import Model
 
 from franchise_manager.api.domain.brand.brand import Brand
+from franchise_manager.api.domain.brand.name import Name
+from franchise_manager.api.domain.brand.business_number import BusinessNumber
+
+from franchise_manager.api.infrastructure.postgresql.repository import PostgresRepository
 
 
 # #
 # model
 
-class BrandModel(Base):
+class BrandModel(Model):
     __tablename__ = "brands"
 
     id: Mapped[UUID] = mapped_column(
@@ -45,9 +48,40 @@ class BrandModel(Base):
         nullable=True,
     )
 
+    __table_args__ = (
+        Index(
+            "uq_brands_business_number_active",
+            "business_number",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL AND business_number IS NOT NULL"),
+        ),
+    )
+
+
+# #
+# mapper
+
+def _to_brand(model: BrandModel) -> Brand:
+    brand = Brand(
+        id=model.id,
+        name=Name.from_str(model.name),
+        business_number=(
+            BusinessNumber.from_str(model.business_number) if model.business_number else None
+        ),
+        by_factory=True,
+    )
+    return brand
+
 
 # #
 # repository
 
-class BrandRepository(Repository[Brand]):
-    ...
+class BrandRepository(PostgresRepository[Brand, BrandModel]):
+    model = BrandModel
+    mapper = _to_brand
+
+
+# #
+# BrandRepository
+
+brand_repository = BrandRepository()  # type: ignore[call-arg]
