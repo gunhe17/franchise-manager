@@ -334,12 +334,87 @@ class Address(ValueObject):
         return {"text": self._text, "latitude": self._latitude, "longitude": self._longitude}
 ```
 
+```python
+# 시간 값 — from_datetime / to_str + to_datetime
+@dataclass(frozen=True, kw_only=True)
+class OccurredAt(ValueObject):
+    _value: datetime
+    @classmethod
+    def from_datetime(cls, value) -> "OccurredAt":
+        if not isinstance(value, datetime):
+            raise InvalidError("OccurredAt")
+        return cls(_value=value, by_factory=True)
+    def to_str(self) -> str:        # API 직렬화 (to_dict)
+        return self._value.isoformat()
+    def to_datetime(self) -> datetime:  # DB 저장 (to_model)
+        return self._value
+
+# enum 성격 값 — 허용값을 _allowed_list hint로 분리
+@dataclass(frozen=True, kw_only=True)
+class Role(ValueObject):
+    _value: str
+
+    # hint
+    _allowed_list: tuple[str, ...] = ("super_admin", "viewer")
+
+    @classmethod
+    def from_str(cls, value) -> "Role":
+        if not isinstance(value, str):
+            raise InvalidError("Role")
+        # format
+        if value not in cls._allowed_list:
+            raise InvalidFormatError("Role")
+        return cls(_value=value, by_factory=True)
+    def to_str(self) -> str:
+        return self._value
+
+# bool 플래그 — from_bool / to_bool
+@dataclass(frozen=True, kw_only=True)
+class IsChecked(ValueObject):
+    _value: bool
+    @classmethod
+    def from_bool(cls, value) -> "IsChecked":
+        if not isinstance(value, bool):   # isinstance(1, bool) == False → int 거부
+            raise InvalidError("IsChecked")
+        return cls(_value=value, by_factory=True)
+    def to_bool(self) -> bool:
+        return self._value
+```
+
 **ValueObject 원칙**:
 - **frozen dataclass + kw_only** 강제
 - **필드명 `_` 접두** (private)
-- **팩토리**: `from_str` (단순) 또는 `from_dict` (복합)
-- **변환**: `to_str` 또는 `to_dict`
+- **팩토리**: `from_str` (단순) / `from_dict` (복합) / `from_datetime` (시간) / `from_bool` (플래그) / `from_int` (수량·금액)
+- **변환**: `to_str` / `to_dict` / `to_bool` / `to_int` (+ 시간 VO는 DB용 native 접근자 `to_datetime` 추가)
 - **검증 순서**: type (InvalidError) → format (InvalidFormatError) → range/규칙
+
+**datetime은 raw stdlib 타입으로 두지 않는다.** Entity의 모든 datetime 필드는 VO로 승격(aggregate별 VO 파일 — `occurred_at.py` → `OccurredAt`). `to_dict`에서 `.isoformat()` 직접 호출 금지 — VO의 `to_str()` 쿼리 메서드 사용. `to_model`은 native가 필요하므로 `to_datetime()`을 사용.
+- 단순/복합 VO는 String/JSONB 컬럼이라 `to_model`도 `to_str()`/`to_dict()` 그대로지만, 시간 VO는 `DateTime` 컬럼이라 `to_model`만 `to_datetime()`로 갈린다
+- 예외: `created_at` / `updated_at` / `deleted_at`은 DB가 `server_default`/트리거로 관리하므로 Entity 필드가 아니고 VO도 만들지 않는다
+
+**enum 성격 VO는 허용값을 `_allowed_list` hint 속성으로 분리한다.** 고정된 허용 집합(`Role`, `Status`, `Source`, `ActorType` 등)을 가진 VO는 허용값을 팩토리 메서드 안 로컬 변수(`allowed = {...}`)나 inline 튜플로 두지 말고 클래스 레벨 `# hint` 필드로 선언. 검증은 `if value not in cls._allowed_list`.
+- 타입: 튜플(`tuple[str, ...]`) — frozen dataclass는 mutable default(list/set/dict)를 못 받으므로 튜플 고정
+- 허용값이 "데이터로서 선언"돼 한눈에 보이고, 테스트·문서화·재사용(예: API enum 노출) 시 `Role._allowed_list`로 접근 가능
+
+**bool 플래그도 raw `bool`로 두지 않고 VO로 선언한다.** Entity의 `is_checked` 같은 플래그 필드는 `from_bool`/`to_bool`을 가진 VO로 승격 — 도메인 값은 전부 검증된 VO를 거친다는 원칙을 bool에도 일관 적용. `to_dict`/`to_model` 모두 `.to_bool()` 사용(DB가 Boolean 컬럼이라 표현이 안 갈림).
+- 타입 가드는 `isinstance(value, bool)` — 파이썬에서 `isinstance(1, bool)`은 `False`라 int/str/None이 자동 차단된다
+- 기본값이 필요하면 entity 필드는 required로 두고 `new(*, flag: IsChecked | None = None)`에서 `IsChecked.from_bool(False)`로 채운다 (VO는 mutable/factory 호출이라 dataclass 필드 기본값으로 부적절)
+- repo finder가 DB 컬럼을 직접 조회할 때(`_filter_by(column="is_checked", value=False)`)는 원시 bool 그대로 — VO는 도메인 경계용, 쿼리 파라미터는 컬럼 타입에 맞춘다
+
+**`UUID`는 VO로 만들지 않는다 — raw `UUID` 유지.** `id` / FK(`store_id`, `brand_id`, `actor_id` 등) / `request_id` / `idempotency_key`는 그냥 `uuid.UUID` 타입을 쓴다.
+- 근거: `UUID`는 생성자가 형식을 보장하는 **이미 검증된 강타입**이라, email/datetime/bool 같은 stringly-typed/raw primitive와 성격이 다르다. `isinstance(x, UUID)` 가드는 동어반복이라 VO가 새 정보를 안 준다
+- VO화의 유일한 실익은 "`store_id`에 `brand_id`를 잘못 넣는 혼동"을 타입으로 막는 것인데, 그러려면 FK마다 별도 타입(`StoreId`/`BrandId`)이 필요하고 → cross-aggregate import + `Entity.id` 타입 처리 등 복잡도가 이득을 상회한다고 판단해 보류
+- 단일 공용 `Id` VO는 전부 같은 타입이라 혼동 방지 이득이 0 → 채택 안 함
+- id 혼동은 타입이 아니라 리뷰/테스트로 커버한다
+
+**freeform `dict`도 raw로 두지 않고 복합 VO로 감싼다.** `attributes`(order), `before`/`after`/`context`(audit_log) 같은 JSON 메타데이터도 `from_dict`/`to_dict` VO(`Address` 패턴)로 승격. raw `dict`는 frozen Entity의 불변성을 깨고(내부 변경 가능·unhashable) 컨벤션에서 벗어난다.
+- `from_dict`/`to_dict`에서 `dict(value)`로 **방어적 복사** — 외부 참조로 내부 상태를 변형하지 못하게 한다
+
+**정리 — Entity 필드에 raw primitive 금지.** 도메인 값(`str`/`int`/`bool`/`datetime`/`dict`)은 전부 VO로 승격한다. 예외는 둘뿐:
+- `UUID` (id / FK / `request_id` / `idempotency_key`가 UUID인 경우) — 이미 강타입이라 유지
+- `created_at` / `updated_at` / `deleted_at` — DB가 관리하므로 Entity 필드가 아님
+
+식별 키성 str(`idempotency_key` 등)은 non-empty VO로 만들되, "선택적이고 유일"이면 모델은 `nullable=True` + partial unique index(`WHERE col IS NOT NULL`)로 — non-empty 가드만으론 막을 수 없는 "값 없는 다수 행"을 DB에서 허용하면서 값 있는 행만 유일성 강제. (예: `point_ledger.idempotency_key`)
 
 **Entity 패턴**:
 
@@ -355,25 +430,37 @@ class Brand(Entity):
         return cls(name=name, business_number=business_number, by_factory=True)
     
     def to_dict(self):
-        return {"id": str(self.id), "name": self.name.to_str(), "business_number": self.business_number.to_str() if self.business_number else None}
-    
+        return {
+            "id": str(self.id),
+            "name": self.name.to_str(),
+            "business_number": (
+                self.business_number.to_str() if self.business_number else None
+            ),
+        }
+
     def to_model(self):
-        return {"id": self.id, "name": self.name.to_str(), "business_number": self.business_number.to_str() if self.business_number else None}
+        return {
+            "id": self.id,
+            "name": self.name.to_str(),
+            "business_number": (
+                self.business_number.to_str() if self.business_number else None
+            ),
+        }
 ```
 
 **Entity 원칙**:
 - **Entity 상속 필수** → `by_factory=True` 가드, UUID id 자동
 - **팩토리**: `@classmethod @typecheck def new(...)`
-- **`to_dict()`**: API 응답용 (id 포함, UUID → str)
-- **`to_model()`**: DB 저장용 (mapper가 id 처리)
-- **`with_X()`**: immutable evolve (필요시)
+- **`to_dict()`**: API 응답용 (id 포함, UUID → str, datetime VO → `to_str()`)
+- **`to_model()`**: DB 저장용 (**`"id": self.id` 반드시 포함** — model의 id 컬럼은 DB default가 없어 INSERT 시 필수. UUID/datetime은 native)
+- **`with_X()`**: immutable evolve (필요시). 단순 필드 교체는 `with_value`처럼, **도메인 상태 전이**는 동사 메서드 허용 (예: `point_request.decide(*, status, decided_at, decided_by_type, decided_by_id, memo=None)` — 결정 필드 필수로 받아 부분 업데이트 데이터 유실 방지)
 
 **변환 메서드 요약**:
 
 | 방향 | ValueObject | Entity |
 |------|-------------|--------|
-| 입력 | `from_str` / `from_dict` | `new` |
-| 출력 | `to_str` / `to_dict` | `to_dict`, `to_model` |
+| 입력 | `from_str` / `from_dict` / `from_datetime` / `from_bool` / `from_int` | `new` |
+| 출력 | `to_str` / `to_dict` / `to_bool` / `to_int` (시간 VO는 `+ to_datetime`) | `to_dict`, `to_model` |
 
 **Config 클래스**:
 - `ABC` + `@property @abstractmethod` 인터페이스
@@ -582,6 +669,25 @@ async def transactional_session(session_factory):
 - 메서드 사이 한 줄 공백
 - 긴 함수 시그니처: 파라미터마다 줄바꿈 + trailing comma
 - `if __name__ == "__main__":` 는 파일 하단 `# cli` 또는 `# run` 섹션
+
+**flat dict return의 삼항식은 괄호로 감싸 줄바꿈.** `to_dict` / `to_model`처럼 한 줄 = 한 키인 평평한 딕셔너리에서, 값에 `... if ... else ...`가 들어가면 키 라인이 길어져 한눈에 안 들어온다. 괄호 + 줄바꿈으로 "이 키는 예외적 분기가 있다"를 시각적으로 분리한다.
+
+```python
+# ❌ 한 줄에 삼항식
+return {
+    "business_number": self.business_number.to_str() if self.business_number else None,
+}
+
+# ✓ 괄호 + 줄바꿈
+return {
+    "business_number": (
+        self.business_number.to_str() if self.business_number else None
+    ),
+}
+```
+
+- 단순 값(`"name": self.name.to_str()`)은 한 줄 유지 — 삼항식 등 분기 문법이 있을 때만 적용
+- 닫는 괄호 `)` 다음 trailing comma 유지
 
 ---
 

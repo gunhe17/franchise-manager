@@ -107,7 +107,7 @@ FastAPI route handlers. usecase 호출 + HTTP 응답 변환. 비즈니스 로직
 
 모든 도메인 repository는 **stateless 싱글톤**. session은 모든 메서드 호출의 `session=` kwarg로 받음.
 
-**구조**: class variables (`model`, `mapper`, `entity`) 정의 + `__init_subclass__` 자동 생성 + 커스텀 메서드는 `_find_by` / `_filter_by` delegation
+**구조**: class variables (`model`, `mapper`, `entity`) 정의 + `__init_subclass__` 자동 생성 + 커스텀 메서드는 `_find_by`(단건) / `_filter_by`(단일컬럼 리스트) / `_filter_by_all`(다중컬럼 equality 리스트) delegation
 
 **판정 기준 — 부모 vs 자식**:
 - entity 1개에만 쓰이고 일반화 어려움 → domain repository 메서드로
@@ -204,7 +204,7 @@ transactional_session(SessionLocal)
 ## 안티패턴
 
 - ❌ usecase에 `_upsert` 같은 persistence helper → domain repo 공개 메서드(`set_by_key`)로
-- ❌ domain repo에 `find_by_X` 직접 SQL (`select(...).where(...)`) → `PostgresRepository._find_by` / `_filter_by`로 delegate
+- ❌ domain repo에 `find_by_X` 직접 SQL (`select(...).where(...)`) → `PostgresRepository._find_by` / `_filter_by` / `_filter_by_all`(2컬럼 이상)로 delegate. 단일컬럼 `_filter_by` 후 파이썬 후필터(`[x for x in ... if ...]`)도 안티패턴 — `_filter_by_all`로 DB-side 처리
 - ❌ domain repo `__init__` 직접 구현 — `__init_subclass__`가 class variables에서 자동 생성
 - ❌ domain repo `__init__`에 `session` 받기 — repo는 stateless 싱글톤. session은 메서드 인자
 - ❌ usecase에 `repo = SettingRepository(session=session)` 같이 인스턴스화 — 싱글톤 import해서 바로 호출
