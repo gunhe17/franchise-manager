@@ -288,6 +288,7 @@ app = [
     { name = "alembic" },
     { name = "asyncpg" },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -306,6 +307,7 @@ requires-dist = [
     { name = "alembic", marker = "extra == 'app'" },
     { name = "asyncpg", marker = "extra == 'app'" },
     { name = "fastapi", marker = "extra == 'app'" },
+    { name = "httpx", marker = "extra == 'app'" },
     { name = "mcp", marker = "extra == 'mcp'" },
     { name = "mypy", marker = "extra == 'dev'" },
     { name = "pydantic", specifier = ">=2" },
