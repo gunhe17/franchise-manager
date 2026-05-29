@@ -1,10 +1,10 @@
 import os
 
 from franchise_manager.api.server.server import franchise_manager_api
-from franchise_manager.api.server.middleware import cors, proxy_headers
+from franchise_manager.api.server import middleware
 from franchise_manager.api.server.router import Router
 from franchise_manager.api.endpoint import system
-from franchise_manager.api.endpoint import health
+from franchise_manager.api.server import exception
 
 
 # #
@@ -13,12 +13,13 @@ from franchise_manager.api.endpoint import health
 server = franchise_manager_api()
 
 # middleware
-server.middleware(cors())
-server.middleware(proxy_headers())
+server.middleware(middleware.cors())
+server.middleware(middleware.proxy_headers())
 
+# #
 # router
 server.router(
-    Router(path="/health", methods=["GET"], endpoint=health)
+    Router(path="/health", methods=["GET"], endpoint=system.health)
 )
 # dev
 server.router(
@@ -27,6 +28,10 @@ server.router(
 server.router(
     Router(path="/dev/domain-map/data", methods=["GET"], endpoint=system.domain_map_data)
 )
+
+# exception handler
+server.exception_handler(exception.client())
+server.exception_handler(exception.develop())
 
 # app
 app = server.app()

@@ -2,6 +2,7 @@ from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import FastAPI
 
+from franchise_manager.api.server.exception import ExceptionHandler
 from franchise_manager.api.server.lifecycle import Lifecycle
 from franchise_manager.api.server.middleware import Middleware
 from franchise_manager.api.server.router import Router
@@ -14,6 +15,7 @@ class Server:
         self._middlewares: list[Middleware] = []
         self._routers: list[Router] = []
         self._lifecycles: list[Lifecycle] = []
+        self._exception_handlers: list[ExceptionHandler] = []
 
     def middleware(self, middleware: Middleware):
         self._middlewares.append(middleware)
@@ -24,6 +26,9 @@ class Server:
     def lifecycle(self, lifecycle: Lifecycle):
         self._lifecycles.append(lifecycle)
 
+    def exception_handler(self, exception_handler: ExceptionHandler):
+        self._exception_handlers.append(exception_handler)
+
     def app(self):
         lifespan = self._combined_lifespan() if self._lifecycles else None
         app = FastAPI(lifespan=lifespan)
@@ -33,6 +38,9 @@ class Server:
 
         for router in self._routers:
             router.register(app)
+
+        for exception_handler in self._exception_handlers:
+            exception_handler.register(app)
 
         return app
 
